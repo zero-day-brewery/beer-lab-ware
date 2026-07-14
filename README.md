@@ -1,5 +1,6 @@
 # 🍺 Beer-Lab-Ware
 
+[![CI](https://github.com/public-n0cs-code/beer-lab-ware/actions/workflows/ci.yml/badge.svg)](https://github.com/public-n0cs-code/beer-lab-ware/actions/workflows/ci.yml)
 ![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 ![Beer-Lab-Ware hero banner](docs/assets/hero.png)
