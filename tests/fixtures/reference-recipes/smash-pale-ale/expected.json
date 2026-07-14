@@ -1,0 +1,13 @@
+{
+  "OG": 1.053,
+  "FG": 1.011,
+  "ABV": 5.4,
+  "IBU": 32.0,
+  "SRM": 3.8,
+  "volumes": {
+    "preBoilVolume_L": 23.83,
+    "postBoilVolume_L": 20.83,
+    "intoFermenter_L": 19.0
+  },
+  "strikeTemp_C": 73.3
+}

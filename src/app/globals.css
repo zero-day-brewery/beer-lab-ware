@@ -1,0 +1,4051 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "../themes/default.css";
+@import "../themes/matrix.css";
+@import "../themes/cyberpunk.css";
+@import "../themes/neon.css";
+@import "../themes/soundwave.css";
+@import "../themes/metal-cyberpunk.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-hanken);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-fraunces);
+  --font-display: var(--font-fraunces);
+  --color-foam: var(--foam);
+  --color-copper: var(--copper);
+  --color-malt: var(--malt);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    position: relative;
+    /* Smooth theme transitions */
+    transition:
+      background-color 280ms ease,
+      color 280ms ease;
+    /* Taproom ambience — a warm malt glow from the top, a darker pour at the base */
+    background-image:
+      radial-gradient(
+        ellipse 90% 55% at 50% -25%,
+        color-mix(in oklab, var(--primary) 16%, transparent),
+        transparent 62%
+      ),
+      radial-gradient(
+        ellipse 70% 45% at 100% 110%,
+        color-mix(in oklab, var(--copper, var(--accent)) 12%, transparent),
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 60% 40% at 0% 90%,
+        color-mix(in oklab, var(--accent) 8%, transparent),
+        transparent 60%
+      );
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+  /* Film-grain overlay — gives surfaces a tactile, printed-label texture */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.04;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  /* Keep real content above the grain */
+  body > * {
+    position: relative;
+    z-index: 1;
+  }
+  html {
+    @apply font-sans;
+    transition: background-color 280ms ease;
+  }
+  /* Display face for headings, with a touch of optical weight */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-fraunces), ui-serif, Georgia, serif;
+    letter-spacing: -0.015em;
+  }
+  /* Smooth color transitions on commonly themed surfaces (cards, headers, etc.) */
+  .bg-card,
+  .bg-background,
+  .bg-primary,
+  .bg-secondary,
+  .bg-muted,
+  .bg-accent,
+  .border-border,
+  .border-input,
+  .text-foreground,
+  .text-card-foreground,
+  .text-muted-foreground {
+    transition:
+      background-color 280ms ease,
+      color 280ms ease,
+      border-color 280ms ease;
+  }
+}
+
+/* Frosted bronze bar — sticky taproom header */
+.app-header {
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  background-color: color-mix(in oklab, var(--background) 72%, transparent);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--primary) 6%, transparent),
+    transparent 70%
+  );
+  border-bottom-color: color-mix(in oklab, var(--primary) 16%, var(--border)) !important;
+}
+
+/* Pill-shaped nav link that warms + lifts on hover */
+.nav-pill {
+  position: relative;
+  padding: 0.4rem 0.8rem;
+  border-radius: 9999px;
+  color: color-mix(in oklab, var(--foreground) 78%, transparent);
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+.nav-pill::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0.15rem;
+  width: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--primary);
+  transform: translateX(-50%);
+  transition: width 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.nav-pill:hover {
+  background-color: color-mix(in oklab, var(--accent) 55%, transparent);
+  color: var(--foam, var(--accent-foreground));
+  transform: translateY(-1px);
+}
+.nav-pill:hover::after {
+  width: 55%;
+}
+
+/* Card hover-lift — applied via `card-lift` utility class */
+.card-lift {
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+.card-lift:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 10px 30px -10px color-mix(in oklab, var(--primary) 35%, transparent),
+    0 4px 12px -4px color-mix(in oklab, var(--foreground) 8%, transparent);
+  border-color: color-mix(in oklab, var(--primary) 50%, var(--border));
+}
+
+/* Big stylized brand wordmark — brewery-label serif */
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-family: var(--font-fraunces), ui-serif, Georgia, serif;
+  font-weight: 600;
+  font-size: 1.3rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+.brand-link span:last-child {
+  background: linear-gradient(
+    92deg,
+    var(--foam, var(--foreground)),
+    var(--malt, var(--primary)) 75%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.brand-link .brand-glyph {
+  -webkit-text-fill-color: initial;
+  font-size: 1.55rem;
+  filter: drop-shadow(0 2px 6px color-mix(in oklab, var(--primary) 45%, transparent));
+  transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.brand-link:hover .brand-glyph {
+  transform: rotate(-10deg) scale(1.12);
+}
+
+/* Decorative beer-foam line under the header */
+.header-foam {
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--malt, var(--primary)) 70%, transparent) 25%,
+    color-mix(in oklab, var(--foam, var(--accent)) 55%, transparent) 50%,
+    color-mix(in oklab, var(--copper, var(--accent)) 70%, transparent) 75%,
+    transparent
+  );
+  opacity: 0.8;
+  box-shadow: 0 0 12px color-mix(in oklab, var(--primary) 30%, transparent);
+}
+
+/* CTA button — primary action, slightly elevated */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 4px 14px -4px color-mix(in oklab, var(--primary) 50%, transparent);
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px -6px color-mix(in oklab, var(--primary) 60%, transparent);
+}
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* ---- Taproom component kit ---- */
+
+/* Small uppercase label that sits above a heading */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--malt, var(--primary)) 88%, var(--foreground));
+}
+.eyebrow::before,
+.eyebrow.center::after {
+  content: "";
+  width: 1.75rem;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--primary) 70%, transparent)
+  );
+}
+.eyebrow.center::before {
+  background: linear-gradient(
+    270deg,
+    transparent,
+    color-mix(in oklab, var(--primary) 70%, transparent)
+  );
+}
+
+/* Gear / equipment card with a copper tap-strip on top */
+.tap-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--primary) 4%, transparent), transparent 38%),
+    var(--card);
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+.tap-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--malt, var(--primary)), var(--copper, var(--primary)));
+  opacity: 0.55;
+  transition: opacity 220ms ease;
+}
+.tap-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in oklab, var(--primary) 45%, var(--border));
+  box-shadow:
+    0 14px 34px -16px color-mix(in oklab, var(--primary) 55%, transparent),
+    0 4px 12px -6px color-mix(in oklab, #000 60%, transparent);
+}
+.tap-card:hover::before {
+  opacity: 1;
+}
+
+/* Rounded icon tile for a gear category glyph */
+.chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 1.15rem;
+  border-radius: 0.6rem;
+  background: color-mix(in oklab, var(--primary) 12%, var(--card));
+  border: 1px solid color-mix(in oklab, var(--primary) 22%, var(--border));
+  box-shadow: inset 0 1px 0 color-mix(in oklab, var(--foam, #fff) 8%, transparent);
+}
+
+/* Condition status dot + label */
+.cond {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.18rem 0.55rem 0.18rem 0.45rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in oklab, currentColor 30%, transparent);
+  background: color-mix(in oklab, currentColor 12%, transparent);
+}
+.cond .dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+.cond-new,
+.cond-good {
+  color: hsl(140 55% 60%);
+}
+.cond-worn {
+  color: var(--malt, hsl(38 85% 58%));
+}
+.cond-broken {
+  color: hsl(6 75% 62%);
+}
+.cond-retired {
+  color: var(--muted-foreground);
+}
+
+/* Ghost button — quiet secondary action */
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: color-mix(in oklab, var(--foreground) 80%, transparent);
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--secondary) 60%, transparent);
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+.btn-ghost:hover {
+  transform: translateY(-1px);
+  color: var(--foreground);
+  border-color: color-mix(in oklab, var(--primary) 40%, var(--border));
+  background: color-mix(in oklab, var(--accent) 60%, transparent);
+}
+.btn-ghost.danger:hover {
+  color: color-mix(in oklab, var(--destructive) 80%, var(--foreground));
+  border-color: color-mix(in oklab, var(--destructive) 55%, var(--border));
+  background: color-mix(in oklab, var(--destructive) 18%, transparent);
+}
+/* Pressed/active ghost button — used by the inventory card⇄table view toggle */
+.btn-ghost.is-active {
+  color: var(--foreground);
+  border-color: color-mix(in oklab, var(--primary) 55%, var(--border));
+  background: color-mix(in oklab, var(--primary) 16%, transparent);
+}
+
+/* Small stat tile (counts / totals in a section header) */
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 0.6rem;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--card) 70%, transparent);
+}
+.stat-tile .num {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--malt, var(--primary));
+}
+.stat-tile .lbl {
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* ============================================================
+   Brew Flow board — live process diagram of the brewery system
+   ============================================================ */
+
+/* Diagram chrome retired (2026-07-04): the flow-board node/pipe wort-line
+   (stations, standalone, glycol-head, pipe, transfer) is gone. The board is now
+   three add/removable EquipmentRow sections: Brew Systems, Chillers and Coolers,
+   Fermenters. See the eq- and ferm-row rules below. */
+
+/* Section shell — reused for each equipment group (was the fermentation-system box) */
+.ferm-system {
+  flex: 1.6 1 360px;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 1rem 1.1rem 1.15rem;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in oklab, var(--border) 90%, var(--primary) 10%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--card) 60%, transparent),
+    transparent 45%
+  );
+  transition:
+    border-color 280ms ease,
+    box-shadow 280ms ease;
+}
+.ferm-system.cooling {
+  border-color: color-mix(in oklab, var(--primary) 40%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--primary) 16%, transparent);
+}
+/* The equipment sections now STACK vertically inside `.eq-sections` (flex column),
+   so the horizontal-era `flex: 1.6 1 360px` basis on `.ferm-system` became a phantom
+   min-height — leaving a tall empty gap below short sections (Brew Systems / Coolers).
+   In the vertical stack each section should hug its own rows. */
+.eq-section {
+  flex: 0 0 auto;
+}
+.ferm-system-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.ferm-system-title {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--malt, var(--primary)) 80%, var(--foreground));
+}
+/* Fermenter-rows redesign (2026-07-04): the glycol manifold rail + per-vessel
+   connector stubs are retired — the four fermenters are now a vertical
+   single-expand accordion row-stack, not a piping diagram. See `.ferm-row*`. */
+
+/* ---- Status banner (FCS-style) ---- */
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 0.85rem;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--card) 70%, transparent);
+}
+.banner-indicators {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.banner-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.3rem 0.7rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  color: var(--muted-foreground);
+  background: color-mix(in oklab, var(--muted) 40%, transparent);
+  opacity: 0.6;
+  transition: all 200ms ease;
+}
+.banner-chip.on {
+  opacity: 1;
+  color: var(--primary-foreground);
+  background: var(--primary);
+  border-color: var(--primary);
+  box-shadow: 0 0 14px -4px color-mix(in oklab, var(--primary) 60%, transparent);
+}
+.banner-alarms {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+}
+.banner-ok {
+  color: hsl(140 55% 60%);
+  font-weight: 600;
+}
+.banner-count {
+  font-weight: 700;
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
+}
+.banner-count.warn {
+  color: hsl(8 78% 66%);
+  border-color: color-mix(in oklab, hsl(8 78% 66%) 45%, transparent);
+}
+.banner-alert {
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in oklab, currentColor 32%, transparent);
+  background: color-mix(in oklab, currentColor 12%, transparent);
+}
+.banner-alert.warn {
+  color: hsl(8 78% 66%);
+}
+.banner-alert.go {
+  color: hsl(140 55% 60%);
+}
+.banner-alert.info {
+  color: var(--malt, var(--primary));
+}
+
+/* ---- Fermenter detail ---- */
+.day-badge {
+  margin-left: auto;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 0.12rem 0.45rem;
+  border-radius: 9999px;
+  color: var(--fc);
+  border: 1px solid color-mix(in oklab, var(--fc) 35%, transparent);
+  background: color-mix(in oklab, var(--fc) 12%, transparent);
+}
+.ferm-recipe {
+  width: 100%;
+  border-radius: 0.45rem;
+  border: 1px solid var(--input);
+  background: color-mix(in oklab, var(--card) 70%, transparent);
+  color: var(--foreground);
+  font-size: 0.74rem;
+  padding: 0.32rem 0.45rem;
+}
+.ferm-recipe:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--fc) 60%, var(--border));
+}
+.ferm-vitals {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+.vital {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.vital-label {
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted-foreground);
+}
+.vital-pair {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.vital-pair input {
+  width: 100%;
+  min-width: 0;
+  border-radius: 0.4rem;
+  border: 1px solid var(--input);
+  background: color-mix(in oklab, var(--card) 65%, transparent);
+  color: var(--foreground);
+  font-size: 0.78rem;
+  font-family: var(--font-geist-mono), monospace;
+  padding: 0.22rem 0.3rem;
+  text-align: center;
+}
+.vital-pair input:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--fc) 60%, var(--border));
+}
+.vital-pair > span {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+.vital-pair input::-webkit-outer-spin-button,
+.vital-pair input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.vital-pair input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.ferm-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.ferm-progress .bar {
+  height: 0.5rem;
+  border-radius: 9999px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--muted) 60%, transparent);
+}
+.ferm-progress .fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--fc) 65%, transparent), var(--fc));
+  box-shadow: 0 0 10px color-mix(in oklab, var(--fc) 55%, transparent);
+  transition: width 450ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ferm-progress .readout {
+  display: flex;
+  gap: 0.6rem;
+  font-size: 0.66rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-geist-mono), monospace;
+}
+.ferm-progress .readout .pct {
+  color: var(--fc);
+  font-weight: 700;
+}
+
+.ferm-alerts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.mini-alert {
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 0.14rem 0.45rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in oklab, currentColor 32%, transparent);
+  background: color-mix(in oklab, currentColor 12%, transparent);
+}
+.mini-alert.warn {
+  color: hsl(8 78% 66%);
+}
+.mini-alert.go {
+  color: hsl(140 55% 60%);
+}
+.mini-alert.info {
+  color: var(--malt, var(--primary));
+}
+
+.ferm-advance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding: 0.38rem 0.5rem 0.38rem 0.65rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--secondary) 50%, transparent);
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease;
+}
+.ferm-advance:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--fc) 45%, var(--border));
+  background: color-mix(in oklab, var(--fc) 12%, transparent);
+}
+.advance-hint {
+  font-size: 0.6rem;
+  color: var(--muted-foreground);
+}
+
+/* small component chips listed under a station */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.flow-chip {
+  font-size: 0.65rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--secondary) 55%, transparent);
+  color: var(--muted-foreground);
+}
+
+/* status pill */
+.flow-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  align-self: flex-start;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.55rem 0.2rem 0.45rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in oklab, currentColor 35%, transparent);
+  background: color-mix(in oklab, currentColor 14%, transparent);
+}
+.flow-status .dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+.flow-status.live .dot {
+  animation: flow-pulse 1.4s ease-in-out infinite;
+}
+@keyframes flow-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.7);
+  }
+}
+
+/* --- Fermenter rows: a vertical single-expand accordion stack --- */
+.ferm-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+/* spotlight: while one row is open, dim the other collapsed rows */
+.ferm-grid.has-open .ferm-row:not(.is-open) {
+  opacity: 0.5;
+}
+
+.ferm-row {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: var(--card);
+  transition:
+    border-color 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 260ms ease;
+}
+/* left signature-color accent rail (carries the per-fermenter --fc) */
+.ferm-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: color-mix(in oklab, var(--muted-foreground) 40%, transparent);
+  transition:
+    background 260ms ease,
+    box-shadow 260ms ease;
+}
+.ferm-row.on::before {
+  background: var(--fc);
+  box-shadow: 0 0 12px color-mix(in oklab, var(--fc) 60%, transparent);
+}
+.ferm-row.off {
+  opacity: 0.72;
+}
+.ferm-row.on {
+  border-color: color-mix(in oklab, var(--fc) 45%, var(--border));
+}
+.ferm-row.is-open {
+  border-color: color-mix(in oklab, var(--fc) 60%, var(--border));
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--fc) 40%, transparent),
+    0 18px 40px -24px color-mix(in oklab, var(--fc) 70%, transparent);
+  opacity: 1;
+}
+/* attention pulse on the accent rail when a fermenter has active alerts */
+.ferm-row.has-alert::before {
+  animation: ferm-rail-pulse 1.8s ease-in-out infinite;
+}
+@keyframes ferm-rail-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 10px color-mix(in oklab, var(--fc) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 20px color-mix(in oklab, var(--fc) 85%, transparent);
+  }
+}
+
+/* collapsed summary — a real <button> that toggles the row */
+.ferm-row-summary {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.85rem 0.7rem 1.1rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 200ms ease;
+}
+.ferm-row-summary:hover {
+  background: color-mix(in oklab, var(--fc) 8%, transparent);
+}
+.ferm-row-summary:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--fc) 60%, var(--border));
+  outline-offset: -2px;
+}
+/* the day-badge normally floats right; in a row it sits beside the name and the
+   metrics cluster owns the right edge instead */
+.ferm-row-summary .day-badge {
+  margin-left: 0;
+}
+.ferm-row-pill {
+  flex: none;
+  padding: 0.12rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in oklab, var(--fc) 30%, transparent);
+  background: color-mix(in oklab, var(--fc) 12%, transparent);
+}
+.ferm-row.off .ferm-row-pill {
+  border-color: color-mix(in oklab, var(--muted-foreground) 25%, transparent);
+  background: color-mix(in oklab, var(--muted) 40%, transparent);
+}
+.ferm-row-metrics {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.68rem;
+  color: var(--muted-foreground);
+}
+.ferm-row-metrics .frm {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+.ferm-row-metrics .frm-k {
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+}
+.ferm-row-metrics .frm-pct {
+  color: var(--fc);
+  font-weight: 700;
+}
+.ferm-row-bar {
+  position: relative;
+  width: 3.2rem;
+  height: 0.32rem;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--muted) 60%, transparent);
+}
+.ferm-row-bar .fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--fc) 60%, transparent), var(--fc));
+  box-shadow: 0 0 8px color-mix(in oklab, var(--fc) 50%, transparent);
+  transition: width 450ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ferm-row-flag {
+  flex: none;
+}
+@media (max-width: 620px) {
+  .ferm-row-metrics {
+    display: none;
+  }
+}
+
+/* chevron rotates when the row opens */
+.ferm-chevron {
+  flex: none;
+  color: var(--muted-foreground);
+  transition:
+    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 200ms ease;
+}
+.ferm-row.is-open .ferm-chevron {
+  transform: rotate(180deg);
+  color: var(--fc);
+}
+
+/* cinematic reveal: grid-template-rows 0fr -> 1fr with the codebase easing */
+.ferm-row-detail-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ferm-row.is-open .ferm-row-detail-wrap {
+  grid-template-rows: 1fr;
+}
+.ferm-row-detail-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+.ferm-row-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.55rem 0.85rem 0.9rem 1.1rem;
+  border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+}
+.ferm-row-detail .ferm-advance {
+  margin-top: 0;
+}
+.ferm-row-chart {
+  margin-top: 0.1rem;
+}
+
+/* --- Generic EquipmentRow additions: head row (summary + delete), machine
+   summary cluster, and the simpler machine detail grid. Token-driven; the
+   accent rail rides the row's --fc (fermenters = signature hue, machines = --primary). --- */
+.ferm-row-head {
+  display: flex;
+  align-items: stretch;
+}
+.ferm-row-head > .ferm-row-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* the per-row delete lives flush at the right edge of the row shell */
+.ferm-row-delete {
+  flex: none;
+  align-self: stretch;
+  border: none;
+  border-radius: 0;
+  padding: 0 0.8rem;
+  background: transparent;
+  color: color-mix(in oklab, var(--muted-foreground) 80%, transparent);
+}
+.ferm-row-delete:hover {
+  transform: none;
+  border-radius: 0;
+}
+
+/* machine (brew system / cooler) collapsed summary */
+.eq-namecol {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+  line-height: 1.2;
+}
+.eq-sub {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.eq-summary-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.eq-chips {
+  justify-content: flex-end;
+  max-width: 26rem;
+}
+@media (max-width: 720px) {
+  .eq-chips {
+    display: none;
+  }
+}
+
+/* machine detail form */
+.eq-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.55rem;
+}
+@media (min-width: 560px) {
+  .eq-detail-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .eq-field-wide {
+    grid-column: 1 / -1;
+  }
+}
+.eq-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.eq-field-label {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted-foreground);
+}
+
+/* three add/removable sections */
+.eq-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.eq-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.eq-section-count {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  color: var(--muted-foreground);
+}
+.eq-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.eq-empty {
+  padding: 0.35rem 0.15rem;
+}
+
+/* Gear tab — collapsible category-group header (rows view). Reuses the
+   .ferm-system/.eq-section shell + the .ferm-row row-stack + .ferm-chevron; only
+   the header toggle button itself is new. Token-driven, no hardcoded color. */
+.gear-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.gear-group-toggle[aria-expanded="true"] .ferm-chevron {
+  transform: rotate(180deg);
+  color: var(--malt, var(--primary));
+}
+.gear-group-toggle:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--primary) 55%, var(--border));
+  outline-offset: 2px;
+  border-radius: 0.4rem;
+}
+
+/* Collapsible group bodies cap their height and scroll INTERNALLY, so a big
+   category (e.g. Kegging ×27) never takes over the screen. Reusable: add
+   `group-scroll` to any collapsible group's item container. */
+.group-scroll {
+  max-height: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* room for the scrollbar + the rows' focus glow so it isn't clipped */
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--primary) 45%, transparent) transparent;
+}
+/* The grid is a flex column — without this the rows would SHRINK to fit the
+   capped height (collapsing to thin strips) instead of overflowing + scrolling. */
+.group-scroll > * {
+  flex-shrink: 0;
+}
+.group-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.group-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.group-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--primary) 40%, transparent);
+  border-radius: 8px;
+}
+.group-scroll::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--primary) 62%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ferm-row-detail-wrap,
+  .ferm-chevron,
+  .ferm-row-bar .fill {
+    transition: none;
+  }
+  .ferm-row-detail {
+    animation: none;
+  }
+  .ferm-row.has-alert::before {
+    animation: none;
+  }
+}
+
+/* Reused fermenter identity bits — the head/dot/name/status label now live in
+   the row summary + detail (see `.ferm-row*`), still carrying --fc. */
+.ferm-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+.ferm-dot {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 9999px;
+  flex: none;
+  background: color-mix(in oklab, var(--muted-foreground) 50%, transparent);
+  transition: all 260ms ease;
+}
+.ferm-row.on .ferm-dot {
+  background: var(--fc);
+  box-shadow:
+    0 0 10px var(--fc),
+    0 0 22px color-mix(in oklab, var(--fc) 55%, transparent);
+}
+.ferm-name {
+  flex: 0 1 auto;
+  overflow: hidden;
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ferm-state {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--fc);
+}
+.ferm-row.off .ferm-state {
+  color: var(--muted-foreground);
+}
+
+/* --- Process stepper across the top --- */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  background: color-mix(in oklab, var(--card) 70%, transparent);
+}
+.step.on {
+  color: var(--primary-foreground);
+  background: var(--primary);
+  border-color: var(--primary);
+  box-shadow: 0 6px 16px -8px color-mix(in oklab, var(--primary) 70%, transparent);
+}
+.step .step-num {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+.step-arrow {
+  color: var(--muted-foreground);
+  opacity: 0.5;
+}
+
+/* Themed select + input that match the taproom surfaces */
+.field {
+  border-radius: 0.5rem;
+  border: 1px solid var(--input);
+  background: color-mix(in oklab, var(--card) 70%, transparent);
+  color: var(--foreground);
+  padding: 0.45rem 0.65rem;
+  font-size: 0.85rem;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+.field:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--primary) 60%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 18%, transparent);
+}
+
+/* ---- Star rating (tasting) ---- */
+.star-rating-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.star-rating {
+  display: inline-flex;
+  gap: 0.1rem;
+}
+/* Shared glyph: empty = --border, filled = beer-amber (wort, falling back to malt). */
+.star-rating-star {
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--border);
+}
+.star-rating-star.is-filled {
+  color: var(--wort, var(--malt));
+}
+.star-rating-btn {
+  background: none;
+  border: none;
+  padding: 0.1rem 0.15rem;
+  cursor: pointer;
+  border-radius: 0.35rem;
+  transition:
+    color 140ms ease,
+    transform 120ms ease;
+}
+.star-rating-btn:hover {
+  transform: scale(1.12);
+}
+.star-rating-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 40%, transparent);
+}
+.star-rating-clear {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease;
+}
+.star-rating-clear:hover {
+  color: var(--foreground);
+  border-color: color-mix(in oklab, var(--primary) 40%, var(--border));
+}
+/* Read-only inline variant (logbook list + summaries). */
+.star-rating-readonly {
+  display: inline-flex;
+  gap: 0.03rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.star-rating-readonly .star-rating-star {
+  font-size: 0.85rem;
+}
+
+/* ---- Inventory report ---- */
+.report-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+.report-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+.report-subtitle {
+  font-style: italic;
+  opacity: 0.85;
+}
+.report-meta {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  margin-top: 0.25rem;
+}
+.report-section {
+  margin-top: 2rem;
+}
+.report-section > h2 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.25rem;
+  margin-bottom: 1rem;
+}
+.report-group {
+  margin-bottom: 1.25rem;
+  break-inside: avoid;
+}
+.report-group-title {
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+.report-group-count {
+  opacity: 0.7;
+  font-weight: 400;
+}
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.report-table th,
+.report-table td {
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+.report-table th {
+  background: var(--muted);
+}
+.report-empty {
+  opacity: 0.7;
+  font-style: italic;
+}
+
+/* ============================================================
+   App shell — left sidebar (taproom skin)
+   ============================================================ */
+
+.skip-link {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  margin: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 0.5rem;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 700;
+  font-size: 0.85rem;
+  transform: translateY(-150%);
+  transition: transform 160ms ease;
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 60;
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  background-color: color-mix(in oklab, var(--card) 90%, var(--background));
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--primary) 7%, transparent),
+    transparent 38%
+  );
+  border-right: 1px solid color-mix(in oklab, var(--primary) 16%, var(--border));
+  backdrop-filter: saturate(140%) blur(8px);
+}
+
+@media (max-width: 1023px) {
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    box-shadow: 0 0 50px -12px #000;
+  }
+  .sidebar.is-open {
+    transform: translateX(0);
+  }
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 1.1rem 0.9rem 0.9rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--primary) 10%, var(--border));
+}
+.sidebar .brand-glyph,
+.mobile-topbar .brand-glyph {
+  color: var(--malt, var(--primary));
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.8rem 0.6rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.side-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.6rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: color-mix(in oklab, var(--foreground) 74%, transparent);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.side-link-icon {
+  flex: none;
+  opacity: 0.82;
+}
+.side-link:hover {
+  background: color-mix(in oklab, var(--accent) 55%, transparent);
+  color: var(--foreground);
+}
+.side-link.is-active {
+  background: color-mix(in oklab, var(--primary) 15%, transparent);
+  color: var(--foam, var(--foreground));
+  font-weight: 600;
+}
+.side-link.is-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--primary);
+  box-shadow: 0 0 10px color-mix(in oklab, var(--primary) 60%, transparent);
+}
+.side-link.is-active .side-link-icon {
+  opacity: 1;
+  color: var(--malt, var(--primary));
+}
+
+.sidebar-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.9rem 0.8rem;
+  border-top: 1px solid color-mix(in oklab, var(--primary) 10%, var(--border));
+}
+.sidebar-tag {
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.4rem;
+  width: 2.4rem;
+  border-radius: 0.55rem;
+  color: var(--foreground);
+  border: 1px solid transparent;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+.icon-btn:hover {
+  background: color-mix(in oklab, var(--accent) 55%, transparent);
+}
+/* The base .icon-btn display would otherwise beat Tailwind's `lg:hidden`
+   (utilities are lower priority in Tailwind v4), so hide the drawer-close
+   button on desktop with a more specific rule. */
+@media (min-width: 1024px) {
+  .sidebar-brand .icon-btn {
+    display: none;
+  }
+}
+
+/* Scoped to mobile so it never overrides the JSX `lg:hidden`. */
+@media (max-width: 1023px) {
+  .mobile-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.7rem;
+    background-color: color-mix(in oklab, var(--background) 80%, transparent);
+    backdrop-filter: saturate(150%) blur(12px);
+    border-bottom: 1px solid color-mix(in oklab, var(--primary) 14%, var(--border));
+  }
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: color-mix(in oklab, #000 55%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.app-main-wrap {
+  min-height: 100vh;
+}
+@media (min-width: 1024px) {
+  .app-main-wrap {
+    margin-left: 250px;
+  }
+}
+.app-main {
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 4rem;
+}
+@media (min-width: 1024px) {
+  .app-main {
+    padding: 2rem 2rem 4rem;
+  }
+}
+
+/* ============================================================
+   Calculation panel — vital gauges + beer color
+   ============================================================ */
+
+.calc-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.calc-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.calc-title {
+  font-family: var(--font-fraunces), ui-serif, Georgia, serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.1;
+  margin-top: 0.15rem;
+}
+
+/* Beer-color preview — a little glass filled with the recipe's SRM color */
+.beer-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.beer-glass {
+  position: relative;
+  display: block;
+  width: 2.1rem;
+  height: 2.7rem;
+  border-radius: 0.3rem 0.3rem 0.5rem 0.5rem;
+  border: 1px solid color-mix(in oklab, #000 35%, transparent);
+  box-shadow:
+    inset -3px 0 6px color-mix(in oklab, #000 28%, transparent),
+    inset 3px 0 5px color-mix(in oklab, #fff 22%, transparent),
+    0 2px 6px color-mix(in oklab, #000 45%, transparent);
+  overflow: hidden;
+}
+.beer-foam {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 0.42rem;
+  background: var(--foam, #f3ead2);
+  border-radius: 0.3rem 0.3rem 40% 40%;
+  box-shadow: 0 1px 2px color-mix(in oklab, #000 25%, transparent);
+}
+.beer-srm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--malt, var(--primary));
+}
+.beer-srm small {
+  font-size: 0.55rem;
+  letter-spacing: 0.12em;
+  color: var(--muted-foreground);
+  font-weight: 700;
+}
+
+.gauge-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+@media (min-width: 1024px) {
+  .gauge-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* A single vital with its range gauge */
+.gaugecard {
+  --vc: var(--muted-foreground);
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  padding: 0.5rem 0.6rem 0.55rem;
+  background: color-mix(in oklab, var(--card) 75%, transparent);
+}
+.gaugecard.is-in {
+  --vc: hsl(140 55% 60%);
+}
+.gaugecard.is-warn {
+  --vc: var(--malt, hsl(38 85% 58%));
+}
+.gaugecard.is-out {
+  --vc: hsl(8 78% 66%);
+}
+.gauge-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.gauge-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.gauge-value {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.gauge-track {
+  position: relative;
+  height: 0.5rem;
+  margin: 0.45rem 0 0.3rem;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--foreground) 8%, transparent);
+  overflow: visible;
+}
+.gauge-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--vc) 32%, transparent);
+}
+.gauge-marker {
+  position: absolute;
+  top: 50%;
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 9999px;
+  /* --gauge-marker decouples the needle from the band's --vc tone; themes that
+     don't define it fall back to --vc (unchanged behaviour). */
+  background: var(--gauge-marker, var(--vc));
+  transform: translate(-50%, -50%);
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 0 8px color-mix(in oklab, var(--gauge-marker, var(--vc)) 70%, transparent);
+}
+.gauge-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.6rem;
+}
+.gauge-range {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  color: var(--muted-foreground);
+}
+.gauge-status {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--vc);
+}
+
+/* Volumes / strike blocks */
+.calc-block {
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: color-mix(in oklab, var(--card) 70%, transparent);
+  padding: 0.6rem 0.75rem;
+}
+.calc-block-title {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--malt, var(--primary)) 80%, var(--foreground));
+  margin-bottom: 0.35rem;
+}
+.calc-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.calc-rows > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+}
+.calc-rows dt {
+  color: var(--muted-foreground);
+}
+.calc-rows dd {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  color: var(--foreground);
+}
+.calc-strike {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--malt, var(--primary));
+}
+
+/* Themed empty state for recipe sub-editors */
+.subeditor-empty {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px dashed color-mix(in oklab, var(--primary) 28%, var(--border));
+  border-radius: 0.6rem;
+  background: color-mix(in oklab, var(--primary) 4%, transparent);
+  font-size: 0.82rem;
+  color: var(--muted-foreground);
+}
+.subeditor-empty span[aria-hidden] {
+  font-size: 1.05rem;
+}
+
+/* Horizontal-scroll wrapper so wide report tables never crush on mobile */
+.report-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ---- Recipe brew sheet ---- */
+.sheet-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 0.75rem;
+}
+.sheet-stat {
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: color-mix(in oklab, var(--card) 88%, var(--primary) 4%);
+  padding: 0.6rem 0.75rem;
+}
+.sheet-stat-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+.sheet-stat-value {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono, monospace);
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-top: 0.15rem;
+}
+.sheet-stat-range {
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
+  margin-top: 0.1rem;
+}
+.sheet-swatch {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+}
+.sheet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.sheet-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  border-bottom: 1px solid var(--border);
+  padding: 0.35rem 0.5rem;
+}
+.sheet-table td {
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+  padding: 0.35rem 0.5rem;
+}
+.sheet-actual {
+  min-width: 4rem;
+  border-left: 1px dashed color-mix(in oklab, var(--border) 80%, transparent);
+}
+.sheet-list {
+  list-style: disc;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+/* ---- Refractometer helper (Brew Flow) ---- */
+.refrac-toggle {
+  margin-top: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--primary);
+  border: 1px dashed color-mix(in oklab, var(--primary) 45%, var(--border));
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.5rem;
+}
+.refrac {
+  margin-top: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.refrac-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+.refrac-inputs label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.68rem;
+  color: var(--muted-foreground);
+}
+.refrac-inputs input {
+  border: 1px solid var(--input);
+  border-radius: 0.35rem;
+  background: var(--background);
+  padding: 0.2rem 0.35rem;
+  font-size: 0.8rem;
+}
+.refrac-out {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+}
+.refrac-apply {
+  font-size: 0.72rem;
+  color: var(--primary-foreground);
+  background: var(--primary);
+  border-radius: 0.35rem;
+  padding: 0.15rem 0.5rem;
+}
+.refrac-close {
+  margin-left: auto;
+  color: var(--muted-foreground);
+}
+.refrac-hint {
+  color: var(--muted-foreground);
+}
+
+/* ---- Water-chemistry gate ---- */
+.water-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+.water-modal {
+  width: 100%;
+  max-width: 30rem;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.water-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.water-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+.water-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+.water-custom {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+  align-items: end;
+}
+.water-custom label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.66rem;
+  color: var(--muted-foreground);
+}
+.water-custom input {
+  border: 1px solid var(--input);
+  border-radius: 0.35rem;
+  background: var(--background);
+  padding: 0.2rem 0.35rem;
+  font-size: 0.8rem;
+}
+.water-custom > button {
+  grid-column: 1 / -1;
+}
+.water-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+  font-size: 0.82rem;
+}
+.water-row {
+  display: flex;
+  gap: 0.5rem;
+}
+.water-row b {
+  min-width: 6.5rem;
+}
+.water-block-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+  margin-bottom: 0.2rem;
+}
+.water-salts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.water-salts li {
+  display: flex;
+  justify-content: space-between;
+}
+.water-warn {
+  color: var(--primary);
+  font-size: 0.76rem;
+}
+.water-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.7rem;
+}
+.brew-water-summary {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.66rem;
+  color: var(--muted-foreground);
+  margin-top: 0.25rem;
+}
+.bw-recipe {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+/* ============================================================
+   Water — compare-at-a-glance ion-bar grid (Water tab revamp)
+   Each profile is a ROW of 6 mini-bars scaled to a SHARED per-ion
+   max (see src/lib/brewing/water/ion-bars.ts) + SO₄:Cl + a balance
+   pill. The whole grid scrolls inside its own overflow-x wrapper so
+   narrow viewports never scroll the page body sideways.
+   ============================================================ */
+.water-compare-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: color-mix(in oklab, var(--card) 55%, transparent);
+}
+.water-compare {
+  min-width: 48rem; /* forces scroll INSIDE .water-compare-scroll, not the page */
+  display: flex;
+  flex-direction: column;
+}
+.wc-head,
+.wc-row {
+  display: grid;
+  grid-template-columns:
+    minmax(9rem, 1.4fr) repeat(6, minmax(4rem, 1fr))
+    minmax(4.5rem, 0.8fr) minmax(7.5rem, 1fr) minmax(6.5rem, auto);
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.9rem;
+}
+.wc-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  background: color-mix(in oklab, var(--card) 92%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+.wc-head .wc-col {
+  text-align: left;
+}
+.wc-row {
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 55%, transparent);
+  transition: background 140ms ease;
+}
+.wc-row:last-child {
+  border-bottom: none;
+}
+.wc-row:hover {
+  background: color-mix(in oklab, var(--primary) 6%, transparent);
+}
+.wc-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.wc-drop {
+  flex: none;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+.wc-nm {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--foreground);
+}
+.wc-ion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  min-width: 0;
+}
+.wc-ppm {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.72rem;
+  line-height: 1;
+  color: color-mix(in oklab, var(--foreground) 85%, transparent);
+}
+.wc-bar {
+  position: relative;
+  height: 0.34rem;
+  border-radius: 9999px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--muted) 60%, transparent);
+}
+.wc-bar .fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 100%;
+  min-width: 0;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--ion, var(--primary)) 55%, transparent),
+    var(--ion, var(--primary))
+  );
+  box-shadow: 0 0 6px color-mix(in oklab, var(--ion, var(--primary)) 45%, transparent);
+  transition: width 450ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.wc-ratio {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: var(--foreground);
+}
+.wc-balance {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+  color: color-mix(in oklab, var(--bal, var(--muted-foreground)) 88%, var(--foreground));
+  background: color-mix(in oklab, var(--bal, var(--muted-foreground)) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--bal, var(--muted-foreground)) 40%, transparent);
+}
+.wc-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+/* ============================================================
+   Resizable data-table columns (reusable primitive)
+   ------------------------------------------------------------
+   A faint vertical grip on a column's right boundary, sitting in
+   the header row. Wide transparent hit area; a thin token-driven
+   bar that brightens on hover/focus. Used by any grid- or
+   table-based data table (Water compare grid, Inventory table…).
+   Logic: src/lib/ui/column-resize.ts + components/ui/resizable-columns.tsx
+   ============================================================ */
+.rz-host {
+  /* header cell must anchor the absolutely-positioned grip */
+  position: relative;
+}
+.rz-handle {
+  position: absolute;
+  top: 0;
+  right: -0.3rem; /* straddle the column boundary / grid gap */
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.7rem; /* wide hit area — easy to grab */
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+.rz-handle::before {
+  content: "";
+  width: 2px;
+  height: 55%;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--border) 85%, transparent);
+  transition:
+    background 120ms ease,
+    height 120ms ease;
+}
+.rz-handle:hover::before,
+.rz-handle:focus-visible::before {
+  background: var(--ring, var(--primary));
+  height: 80%;
+}
+.rz-handle:focus-visible {
+  outline: 2px solid var(--ring, var(--primary));
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rz-handle::before {
+    transition: none;
+  }
+}
+/* Real <table>s opt in to fixed layout so <col> widths are authoritative. */
+.rz-table {
+  table-layout: fixed;
+}
+.rz-table th {
+  position: relative;
+}
+.rz-table th,
+.rz-table td {
+  /* fixed layout honours <col> widths; break long content instead of blowing
+     the track out (no clipping — the actions column stays fully visible). */
+  overflow-wrap: anywhere;
+}
+
+/* --- Guided brew timer rack (Phase 6) — keep ABOVE @media print --- */
+.tmr-rack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.tmr-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+}
+.tmr-armed {
+  opacity: 1;
+}
+.tmr-fired {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+.tmr-countdown {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, monospace);
+  font-size: 1.5rem;
+}
+@keyframes tmr-pulse-kf {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(217, 164, 65, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(217, 164, 65, 0.45);
+  }
+}
+.tmr-pulse {
+  animation: tmr-pulse-kf 0.9s ease-in-out 3;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tmr-pulse {
+    animation: none;
+  }
+}
+
+/* --- Logbook batch list (Phase 7) — keep ABOVE @media print --- */
+.batchlist {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.batchlist-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.batchlist-filter {
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  background: var(--card);
+  color: var(--card-foreground);
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.batchlist-filter.is-active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+.batchlist-undo {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.batchlist-undo-btn {
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: inherit;
+}
+.batchlist-empty {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  padding: 2rem 0;
+  text-align: center;
+}
+.batchlist-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.batchlist-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--card);
+}
+.batchlist-row-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+}
+.batchlist-no {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.batchlist-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.batchlist-chip {
+  flex-shrink: 0;
+  border-radius: 9999px;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+.batchlist-chip--in-progress {
+  background: color-mix(in oklab, var(--primary) 15%, transparent);
+  color: var(--primary);
+}
+.batchlist-chip--complete {
+  background: color-mix(in oklab, oklch(72% 0.18 145) 18%, transparent);
+  color: oklch(55% 0.18 145);
+}
+.batchlist-chip--archived {
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+.batchlist-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+.batchlist-action {
+  font-size: 0.8125rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--card-foreground);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.batchlist-action:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+.batchlist-action--danger {
+  color: oklch(55% 0.2 25);
+  border-color: color-mix(in oklab, oklch(55% 0.2 25) 30%, transparent);
+}
+.batchlist-action--danger:hover {
+  background: color-mix(in oklab, oklch(55% 0.2 25) 12%, transparent);
+  color: oklch(45% 0.2 25);
+}
+
+/* --- Logbook batch sheet view (Phase 7) — keep ABOVE @media print --- */
+.logsheet {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+}
+.logsheet-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.logsheet-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--foreground);
+  flex: 1;
+  min-width: 0;
+}
+.logsheet-chip {
+  flex-shrink: 0;
+  border-radius: 9999px;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+.logsheet-chip--in-progress {
+  background: color-mix(in oklab, var(--primary) 15%, transparent);
+  color: var(--primary);
+}
+.logsheet-chip--complete {
+  background: color-mix(in oklab, oklch(72% 0.18 145) 18%, transparent);
+  color: oklch(55% 0.18 145);
+}
+.logsheet-chip--archived {
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+.logsheet-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: color-mix(in oklab, var(--card) 80%, var(--muted));
+}
+.logsheet-section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: color-mix(in oklab, var(--malt, var(--primary)) 88%, var(--foreground));
+}
+.logsheet-notes {
+  color: var(--foreground);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.logsheet-empty {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  padding: 2rem 0;
+  text-align: center;
+}
+
+/* --- Logbook trends view (Phase 7) — keep ABOVE @media print --- */
+.trend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  padding: 1.25rem;
+}
+.trend-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.875rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.trend-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.trend-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.trend-last {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+}
+.trend-spark {
+  width: 100%;
+  height: 24px;
+  display: block;
+  overflow: visible;
+}
+.trend-spark-line {
+  stroke: var(--amber, #d97706);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.trend-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.6875rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+}
+.trend-empty {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  padding: 2rem 0;
+  text-align: center;
+}
+
+/* --- Fermentation readings log + dual-line chart (batch sheet) — keep ABOVE @media print --- */
+.ferment-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+.ferment-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ferment-field input {
+  min-width: 6.5rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+  color: var(--foreground);
+  background: var(--input, var(--card));
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  font-family: var(--font-mono);
+}
+.ferment-field--note {
+  flex: 1 1 10rem;
+}
+.ferment-field--note input {
+  width: 100%;
+  font-family: inherit;
+}
+.ferment-add {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--primary-foreground);
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+.ferment-add:hover {
+  background: color-mix(in oklab, var(--primary) 85%, var(--foreground));
+}
+.ferment-chart-card {
+  gap: 0.6rem;
+}
+.ferment-legend {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ferment-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.ferment-swatch {
+  width: 0.9rem;
+  height: 0.18rem;
+  border-radius: 1px;
+  display: inline-block;
+}
+.ferment-swatch--gravity {
+  background: var(--wort, var(--malt));
+}
+.ferment-swatch--temp {
+  background: var(--primary);
+}
+.ferment-chart {
+  width: 100%;
+  height: 120px;
+  display: block;
+  overflow: visible;
+}
+.ferment-line-gravity {
+  stroke: var(--wort, var(--malt));
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.ferment-line-temp {
+  stroke: var(--primary);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.ferment-chart-empty {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  padding: 1.5rem 0;
+  text-align: center;
+}
+.ferment-del {
+  color: var(--muted-foreground);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0.1rem 0.3rem;
+}
+.ferment-del:hover {
+  color: var(--destructive);
+}
+
+/* ===== Guided Brew Runner (gs-*) — keep BEFORE @media print (Tailwind v4 drops CSS after it) ===== */
+.gs-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 100dvh;
+  padding: 1rem;
+}
+.gs-chrome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.gs-pips {
+  display: flex;
+  gap: 0.5rem;
+}
+.gs-pip {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  opacity: 0.55;
+}
+.gs-pip.on {
+  color: var(--primary);
+  opacity: 1;
+}
+.gs-recipe {
+  font-family: var(--font-fraunces);
+  font-size: 1.05rem;
+}
+.gs-exit {
+  color: var(--muted-foreground);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.gs-rail {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--border) 70%, transparent);
+  overflow: hidden;
+}
+.gs-rail-fill {
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.3s ease;
+}
+.gs-rail-meta {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+.gs-safety {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.6rem;
+  font-weight: 600;
+  background: color-mix(in oklab, var(--destructive) 16%, var(--card));
+  border: 1px solid color-mix(in oklab, var(--destructive) 40%, transparent);
+}
+.gs-step-title {
+  font-family: var(--font-fraunces);
+  font-size: clamp(1.4rem, 5vw, 2.2rem);
+  letter-spacing: -0.015em;
+}
+.gs-hero {
+  font-family: var(--font-geist-mono);
+  font-size: clamp(2.5rem, 11vw, 6.5rem);
+  font-variant-numeric: tabular-nums;
+  color: var(--malt);
+  text-align: center;
+  padding: 1rem 0;
+  text-shadow: 0 0 28px color-mix(in oklab, var(--primary) 45%, transparent);
+}
+.gs-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+.gs-back,
+.gs-skip {
+  min-height: 64px;
+  min-width: 64px;
+  padding: 0 1rem;
+  border-radius: 0.7rem;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--card) 80%, transparent);
+  color: var(--foreground);
+  cursor: pointer;
+}
+.gs-advance {
+  flex: 1;
+  min-height: 64px;
+  border-radius: 0.7rem;
+  border: none;
+  cursor: pointer;
+  background: var(--primary);
+  color: var(--background);
+  font-weight: 700;
+  font-size: 1.05rem;
+  box-shadow: 0 6px 22px color-mix(in oklab, var(--primary) 35%, transparent);
+}
+.gs-advance:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.gs-peek {
+  font-size: 0.85rem;
+  color: var(--muted-foreground);
+}
+.gs-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.gs-stepper-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 0.6rem;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--card) 80%, transparent);
+  color: var(--foreground);
+  font-size: 1.4rem;
+  cursor: pointer;
+}
+.gs-stepper-val {
+  font-family: var(--font-geist-mono);
+  font-variant-numeric: tabular-nums;
+  min-width: 5ch;
+  text-align: center;
+  font-size: 1.3rem;
+}
+.gs-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 0.5rem;
+  font-family: var(--font-geist-mono);
+  font-weight: 700;
+  background: color-mix(in oklab, var(--muted-foreground) 14%, transparent);
+}
+.gs-delta.go {
+  color: hsl(140 55% 60%);
+  background: color-mix(in oklab, hsl(140 55% 60%) 18%, transparent);
+}
+.gs-delta.warn {
+  color: var(--malt);
+  background: color-mix(in oklab, var(--malt) 18%, transparent);
+}
+.gs-delta.brick {
+  color: var(--destructive);
+  background: color-mix(in oklab, var(--destructive) 18%, transparent);
+}
+.gs-branch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.gs-branch-card {
+  padding: 1rem;
+  border-radius: 0.8rem;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--card) 85%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.gs-branch-card.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 35%, transparent);
+}
+.gs-resume,
+.gs-ribbon {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border-radius: 0.8rem;
+  background: color-mix(in oklab, var(--primary) 12%, var(--card));
+  border: 1px solid color-mix(in oklab, var(--primary) 30%, transparent);
+}
+@keyframes gs-flash-kf {
+  0%,
+  100% {
+    background: transparent;
+  }
+  50% {
+    background: color-mix(in oklab, var(--primary) 30%, transparent);
+  }
+}
+.gs-flash {
+  animation: gs-flash-kf 0.4s ease-in-out 3;
+}
+@media (max-width: 540px) {
+  .gs-branch {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gs-flash {
+    animation: none;
+    outline: 3px solid var(--primary);
+  }
+  .gs-rail-fill {
+    transition: none;
+  }
+}
+/* gs-log-delta multi-field controls */
+.gs-log-checkbox {
+  width: 1.2rem;
+  height: 1.2rem;
+  flex: none;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.gs-log-text {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid var(--input);
+  background: color-mix(in oklab, var(--card) 70%, transparent);
+  color: var(--foreground);
+  font-size: 0.9rem;
+  padding: 0.45rem 0.65rem;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+.gs-log-text:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--primary) 60%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 18%, transparent);
+}
+/* ===== end gs-* ===== */
+
+/* ============================================================
+   METAL-CYBERPUNK — theme-scoped decoration ("cold machine, warm wort")
+   Every rule here is scoped under html[data-theme="metal-cyberpunk"] so the
+   other five themes (default/matrix/cyberpunk/neon/soundwave) are visually
+   UNCHANGED. Cyan = machine/UI accent; wort-amber (--wort/--malt) = beer &
+   gravity data; hop-green (--hop) / ember (--destructive) = semantic status.
+   Keep this block ABOVE @media print (Tailwind v4 drops CSS after it).
+   ============================================================ */
+
+/* --- Engraved display type: heavy UPPERCASE with a stamped-into-steel shadow.
+   The face itself is swapped to Archivo via --font-fraunces in the theme file. --- */
+html[data-theme="metal-cyberpunk"] h1,
+html[data-theme="metal-cyberpunk"] h2,
+html[data-theme="metal-cyberpunk"] h3,
+html[data-theme="metal-cyberpunk"] .brand-link,
+html[data-theme="metal-cyberpunk"] .calc-title,
+html[data-theme="metal-cyberpunk"] .gs-recipe,
+html[data-theme="metal-cyberpunk"] .gs-step-title {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 800;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05),
+    0 -1px 1px rgba(0, 0, 0, 0.7);
+}
+/* The brand wordmark clips a gradient into the text — an engraved shadow would
+   fight the transparent fill, so keep it flat-uppercase there. */
+html[data-theme="metal-cyberpunk"] .brand-link,
+html[data-theme="metal-cyberpunk"] .brand-link span:last-child {
+  text-shadow: none;
+}
+
+/* --- Atmosphere: duotone ambient glow (cyan top-right, wort bottom-left) --- */
+html[data-theme="metal-cyberpunk"] body {
+  background-image:
+    radial-gradient(
+      ellipse 70% 55% at 100% -10%,
+      color-mix(in oklab, var(--primary) 16%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 65% 50% at 0% 110%,
+      color-mix(in oklab, var(--wort, var(--malt)) 13%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 80% 60% at 50% 50%,
+      color-mix(in oklab, var(--accent) 10%, transparent),
+      transparent 70%
+    );
+}
+
+/* --- Atmosphere: faint CRT scanlines replace the warm film-grain --- */
+html[data-theme="metal-cyberpunk"] body::before {
+  opacity: 0.5;
+  mix-blend-mode: normal;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0,
+    transparent 2px,
+    color-mix(in oklab, #000 55%, transparent) 2px,
+    color-mix(in oklab, #000 55%, transparent) 3px
+  );
+}
+/* --- Atmosphere: a subtle brushed-steel vertical sheen over the whole panel --- */
+html[data-theme="metal-cyberpunk"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  mix-blend-mode: soft-light;
+  background-image: repeating-linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--sheen) 8%, transparent) 0,
+    transparent 1px,
+    transparent 3px,
+    color-mix(in oklab, #000 30%, transparent) 4px
+  );
+}
+
+/* --- Brushed-metal panels: a top-edge hairline of light so surfaces read as
+   milled steel plates. Only applied to panels that carry no stateful box-shadow
+   of their own — the stateful panels (.station.active / .ferm.on / .tap-card:hover)
+   already get a cool milled edge for free via the now-cool --foam token + cyan
+   glows, and overriding their box-shadow here would clobber those state glows. --- */
+html[data-theme="metal-cyberpunk"] .gaugecard,
+html[data-theme="metal-cyberpunk"] .stat-tile,
+html[data-theme="metal-cyberpunk"] .calc-block {
+  box-shadow: inset 0 1px 0 color-mix(in oklab, var(--sheen) 22%, transparent);
+}
+
+/* --- Corner rivets retired (2026-07-05): the tap-card ::after node dots read as
+   bulky; dropped for a cleaner, unified card across every page. ::after now free. --- */
+
+/* --- Tap-card top strip becomes a wort-line: copper → wort → cyan, with glow --- */
+html[data-theme="metal-cyberpunk"] .tap-card::before {
+  background: linear-gradient(90deg, var(--copper), var(--wort, var(--malt)) 50%, var(--primary));
+  opacity: 0.85;
+  box-shadow: 0 0 10px color-mix(in oklab, var(--primary) 40%, transparent);
+}
+html[data-theme="metal-cyberpunk"] .tap-card:hover::before {
+  opacity: 1;
+}
+
+/* --- Primary button: cyan control key — gradient fill, cyan rim, cyan glow --- */
+html[data-theme="metal-cyberpunk"] .btn-primary {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--primary) 92%, #fff),
+    var(--primary)
+  );
+  border: 1px solid color-mix(in oklab, var(--primary) 70%, #fff);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--primary) 35%, transparent),
+    0 6px 18px -6px color-mix(in oklab, var(--primary) 65%, transparent);
+}
+html[data-theme="metal-cyberpunk"] .btn-primary:hover {
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--primary) 55%, transparent),
+    0 10px 24px -6px color-mix(in oklab, var(--primary) 80%, transparent);
+}
+
+/* --- Vital-stat gauges: value + band glow WORT-AMBER (beer data); the needle
+   stays CYAN via --gauge-marker (set in the theme file). Status text keeps its
+   semantic hop/wort/ember tone through --vc (redefined just below). --- */
+html[data-theme="metal-cyberpunk"] .gauge-value {
+  color: var(--wort, var(--malt));
+}
+html[data-theme="metal-cyberpunk"] .gauge-band {
+  background: color-mix(in oklab, var(--wort, var(--malt)) 32%, transparent);
+}
+html[data-theme="metal-cyberpunk"] .gaugecard.is-in {
+  --vc: var(--hop);
+}
+html[data-theme="metal-cyberpunk"] .gaugecard.is-warn {
+  --vc: var(--wort, var(--malt));
+}
+html[data-theme="metal-cyberpunk"] .gaugecard.is-out {
+  --vc: var(--destructive);
+}
+/* Logbook trend sparkline is gravity/beer data → wort-amber (its hardcoded
+   fallback #d97706 only shows because --amber is undefined). */
+html[data-theme="metal-cyberpunk"] .trend-spark-line {
+  stroke: var(--wort, var(--malt));
+}
+/* Fermentation chart: gravity = wort-amber (beer data), temp = cyan (machine). */
+html[data-theme="metal-cyberpunk"] .ferment-line-gravity,
+html[data-theme="metal-cyberpunk"] .ferment-swatch--gravity {
+  stroke: var(--wort, var(--malt));
+}
+html[data-theme="metal-cyberpunk"] .ferment-swatch--gravity {
+  background: var(--wort, var(--malt));
+}
+html[data-theme="metal-cyberpunk"] .ferment-line-temp {
+  stroke: var(--primary);
+}
+
+/* --- Semantic status → hop-green (go/in-range) & ember (warn/critical).
+   Overriding the hardcoded status hsl values in theme scope only. --- */
+html[data-theme="metal-cyberpunk"] .cond-new,
+html[data-theme="metal-cyberpunk"] .cond-good,
+html[data-theme="metal-cyberpunk"] .banner-ok,
+html[data-theme="metal-cyberpunk"] .banner-alert.go,
+html[data-theme="metal-cyberpunk"] .mini-alert.go,
+html[data-theme="metal-cyberpunk"] .gs-delta.go {
+  color: var(--hop);
+}
+html[data-theme="metal-cyberpunk"] .gs-delta.go {
+  background: color-mix(in oklab, var(--hop) 18%, transparent);
+}
+html[data-theme="metal-cyberpunk"] .cond-broken,
+html[data-theme="metal-cyberpunk"] .banner-count.warn,
+html[data-theme="metal-cyberpunk"] .banner-alert.warn,
+html[data-theme="metal-cyberpunk"] .mini-alert.warn {
+  color: var(--destructive);
+}
+html[data-theme="metal-cyberpunk"] .banner-count.warn {
+  border-color: color-mix(in oklab, var(--destructive) 45%, transparent);
+}
+/* Logbook status chips (Phase 7) carry their own hardcoded oklch greens/reds. */
+html[data-theme="metal-cyberpunk"] .batchlist-chip--complete,
+html[data-theme="metal-cyberpunk"] .logsheet-chip--complete {
+  background: color-mix(in oklab, var(--hop) 16%, transparent);
+  color: var(--hop);
+}
+html[data-theme="metal-cyberpunk"] .batchlist-action--danger {
+  color: var(--destructive);
+  border-color: color-mix(in oklab, var(--destructive) 30%, transparent);
+}
+html[data-theme="metal-cyberpunk"] .batchlist-action--danger:hover {
+  background: color-mix(in oklab, var(--destructive) 12%, transparent);
+  color: var(--destructive);
+}
+
+/* --- Accessibility: crisp cyan focus ring. (This theme adds no new motion —
+   it reuses the shared keyframes, which the app already gates under
+   prefers-reduced-motion where it matters.) --- */
+html[data-theme="metal-cyberpunk"] :focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@media print {
+  .app-header,
+  .header-foam,
+  .report-actions,
+  .sidebar,
+  .mobile-topbar {
+    display: none;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
+  main {
+    padding: 0;
+  }
+  .report-table th {
+    background: #eee;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .report-group {
+    break-inside: avoid;
+  }
+  thead {
+    display: table-header-group;
+  }
+  .sheet-actual {
+    border-left: 1px solid #999;
+  }
+  .sheet,
+  .sheet-table {
+    break-inside: avoid;
+  }
+}
+
+/* ============================================================
+   AI Brewing Companion — floating trigger + slide-over drawer
+   Token-driven; reuses .tap-card / .field / .btn-primary / .icon-btn.
+   ============================================================ */
+
+/* Floating trigger — present on every page (mounted in AppShell) */
+.companion-fab {
+  position: fixed;
+  right: clamp(0.9rem, 3vw, 1.6rem);
+  bottom: clamp(0.9rem, 3vw, 1.6rem);
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.95rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in oklab, var(--primary) 55%, var(--border));
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: 0 8px 24px -8px color-mix(in oklab, var(--primary) 60%, transparent);
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+.companion-fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px -8px color-mix(in oklab, var(--primary) 70%, transparent);
+}
+.companion-fab:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--primary) 70%, var(--foreground));
+  outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .companion-fab-label {
+    display: none;
+  }
+  .companion-fab {
+    padding: 0.7rem;
+  }
+}
+
+/* Overlay + right-anchored slide-over */
+.companion-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  justify-content: flex-end;
+}
+.companion-scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  background: color-mix(in oklab, black 55%, transparent);
+  animation: companion-fade 160ms ease;
+}
+.companion-drawer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: min(30rem, 100%);
+  height: 100%;
+  max-height: 100%;
+  padding: 0;
+  border-radius: 0;
+  border-left: 1px solid var(--border);
+  background: var(--card);
+  animation: companion-slide 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes companion-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes companion-slide {
+  from {
+    transform: translateX(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .companion-scrim,
+  .companion-drawer,
+  .companion-dot {
+    animation: none;
+  }
+}
+
+/* Header */
+.companion-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.companion-head-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.companion-head-glyph {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.6rem;
+  color: var(--primary);
+  background: color-mix(in oklab, var(--primary) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--primary) 30%, transparent);
+}
+.companion-head-text {
+  min-width: 0;
+}
+.companion-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+.companion-sub {
+  font-size: 0.72rem;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Message list */
+.companion-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1rem;
+}
+.companion-empty {
+  margin: auto;
+  text-align: center;
+  color: var(--muted-foreground);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 1.5rem 0.5rem;
+}
+.companion-empty-glyph {
+  color: var(--primary);
+  opacity: 0.8;
+}
+.companion-empty-title {
+  font-weight: 600;
+  color: var(--foreground);
+}
+.companion-empty-hint {
+  font-size: 0.76rem;
+  line-height: 1.5;
+  max-width: 22rem;
+}
+
+/* Bubbles */
+.companion-msg {
+  max-width: 92%;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.8rem;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  border: 1px solid var(--border);
+}
+.companion-msg.user {
+  align-self: flex-end;
+  background: color-mix(in oklab, var(--primary) 16%, var(--card));
+  border-color: color-mix(in oklab, var(--primary) 34%, var(--border));
+  white-space: pre-wrap;
+}
+.companion-msg.assistant {
+  align-self: flex-start;
+  background: color-mix(in oklab, var(--secondary) 45%, var(--card));
+}
+.companion-msg.error {
+  align-self: flex-start;
+  display: flex;
+  gap: 0.5rem;
+  background: color-mix(in oklab, var(--destructive) 12%, var(--card));
+  border-color: color-mix(in oklab, var(--destructive) 45%, var(--border));
+}
+.companion-error-icon {
+  color: var(--destructive);
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+.companion-error-title {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--destructive);
+}
+.companion-error-body {
+  font-size: 0.78rem;
+  color: var(--muted-foreground);
+  word-break: break-word;
+}
+
+/* Markdown inside an assistant bubble */
+.companion-md {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.companion-md-p {
+  white-space: pre-wrap;
+}
+.companion-muted {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+.companion-md-h {
+  font-weight: 700;
+  font-size: 0.92rem;
+  line-height: 1.25;
+}
+.companion-md-list {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.companion-md-list li {
+  list-style: revert;
+}
+.companion-md code {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.82em;
+  padding: 0.05rem 0.3rem;
+  border-radius: 0.3rem;
+  background: color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+.companion-md-code {
+  overflow-x: auto;
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--background) 60%, var(--card));
+}
+.companion-md-code code {
+  background: none;
+  padding: 0;
+  font-size: 0.78rem;
+}
+.companion-md a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+/* Tool-call chips under an assistant turn */
+.companion-chips {
+  margin: 0.55rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.companion-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  padding: 0.16rem 0.5rem;
+  border-radius: 9999px;
+  color: var(--primary);
+  border: 1px solid color-mix(in oklab, var(--primary) 32%, transparent);
+  background: color-mix(in oklab, var(--primary) 10%, transparent);
+}
+.companion-chip.is-fail {
+  color: var(--destructive);
+  border-color: color-mix(in oklab, var(--destructive) 38%, transparent);
+  background: color-mix(in oklab, var(--destructive) 10%, transparent);
+}
+
+/* Thinking indicator */
+.companion-thinking {
+  display: inline-flex;
+  gap: 0.28rem;
+  padding: 0.15rem 0.1rem;
+}
+.companion-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--foreground) 55%, transparent);
+  animation: companion-bounce 1s infinite ease-in-out;
+}
+.companion-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.companion-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes companion-bounce {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-0.2rem);
+  }
+}
+
+/* Composer */
+.companion-input {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem 1rem;
+  border-top: 1px solid var(--border);
+}
+.companion-textarea {
+  flex: 1;
+  resize: none;
+  min-height: 2.6rem;
+  max-height: 8rem;
+  font-family: inherit;
+  line-height: 1.4;
+}
+.companion-textarea:disabled {
+  opacity: 0.6;
+}
+.companion-send {
+  padding: 0.6rem;
+  flex-shrink: 0;
+}
+.companion-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* No-config setup panel (replaces the composer) */
+.companion-setup {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 1rem;
+  padding: 1rem;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in oklab, var(--primary) 30%, var(--border));
+  background: color-mix(in oklab, var(--primary) 6%, var(--card));
+}
+.companion-setup-glyph {
+  color: var(--primary);
+}
+.companion-setup-title {
+  font-weight: 600;
+}
+.companion-setup-hint {
+  font-size: 0.78rem;
+  color: var(--muted-foreground);
+  line-height: 1.5;
+}
+.companion-setup-link {
+  margin-top: 0.35rem;
+}
+
+/* v3 Stage B — proactive-insight count badge on the FAB.
+   Reuses the .mini-alert severity tint for color/border; overrides only shape +
+   position + a solid card backdrop so the count reads on the primary FAB. */
+.companion-fab-badge {
+  position: absolute;
+  top: -0.4rem;
+  right: -0.3rem;
+  min-width: 1.2rem;
+  height: 1.2rem;
+  padding: 0 0.3rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  line-height: 1;
+  border-radius: 9999px;
+  background: var(--card);
+}
+
+/* v3 Stage B — "Heads up" proactive-insights panel (top of the message area).
+   Token-driven: reuses .tap-card + the .mini-alert severity tints. */
+.companion-headsup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.companion-headsup-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.companion-headsup-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted-foreground);
+}
+.companion-headsup-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.companion-insight {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.6rem 0.65rem;
+}
+.companion-insight-sev {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.companion-insight-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+}
+.companion-insight-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--foreground);
+}
+.companion-insight-detail {
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--muted-foreground);
+}
+.companion-insight-actions {
+  margin-top: 0.15rem;
+}
+.companion-insight-ask {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  padding: 0.22rem 0.55rem;
+}
+.companion-insight-dismiss {
+  flex-shrink: 0;
+  width: 1.6rem;
+  height: 1.6rem;
+}
+
+/* v2 proposed-action cards (Approve / Discard) — under an assistant turn.
+   Token-driven: reuses .tap-card / .mini-alert / .btn-primary / .btn-ghost. */
+.companion-proposals {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+.action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.7rem;
+}
+.action-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.action-card-kind {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--primary);
+}
+.action-card-title {
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--foreground);
+}
+.action-card-preview-text {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+.action-card-recipe {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.action-card-diff {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.4rem;
+  margin: 0.35rem 0 0;
+}
+.action-card-diff > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+.action-card-diff dt {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+}
+.action-card-diff dd {
+  margin: 0;
+  font-size: 0.8rem;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+}
+.action-card-before {
+  color: var(--muted-foreground);
+}
+.action-card-after {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.action-card-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.action-card-approve {
+  padding: 0.42rem 0.95rem;
+  font-size: 0.8rem;
+}
+.action-card-actions .btn-ghost {
+  font-size: 0.8rem;
+}
+.action-card-status {
+  align-self: flex-start;
+}
+.action-card-dismissed {
+  font-size: 0.76rem;
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+/* --- Interactive chart kit (E4) — tokens reused: --border grid, --muted-foreground
+   axis text, --popover tooltip, --chart-* series ramp. No new tokens required. --- */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+.chart-root {
+  width: 100%;
+}
+.chart-root--empty {
+  min-height: 120px;
+}
+.chart-empty {
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+  padding: 1rem 0;
+}
+.chart-skeleton {
+  width: 100%;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--card) 60%, transparent);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.chart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.chart-gridline {
+  stroke: var(--border);
+  stroke-width: 1;
+  opacity: 0.55;
+}
+.chart-axis-tick {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.chart-axis-text {
+  fill: var(--muted-foreground);
+  font-size: 10px;
+}
+.chart-axis-label {
+  fill: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+}
+.chart-series-line {
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.chart-series-area {
+  opacity: 0.14;
+}
+.chart-point {
+  opacity: 0.9;
+}
+.chart-crosshair-line {
+  stroke: var(--muted-foreground);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.7;
+}
+.chart-crosshair-dot {
+  stroke: var(--background);
+  stroke-width: 1.5;
+}
+.chart-capture {
+  cursor: crosshair;
+}
+.chart-capture:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.chart-tooltip {
+  z-index: 5;
+  min-width: 8rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: calc(var(--radius) - 0.2rem);
+  border: 1px solid var(--border);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  font-size: 0.75rem;
+}
+.chart-tooltip-title {
+  color: var(--muted-foreground);
+  margin-bottom: 0.25rem;
+}
+.chart-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.chart-tooltip-swatch {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 2px;
+  flex: none;
+}
+.chart-tooltip-label {
+  color: var(--muted-foreground);
+}
+.chart-tooltip-value {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.5rem;
+}
+.chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+.chart-legend-swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 2px;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- Yeast Bank (T5) — Layout A: horizontal generation flow. Token-driven;
+   reuses .tap-card / .mini-alert / .ferm-progress. Each strain scrolls in its
+   own .lineage-scroll so a deep lineage never widens the page body. --- */
+.lineage-strain {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem;
+}
+.lineage-strain-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.lineage-strain-heading {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--foreground);
+}
+.lineage-strain-meta {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+.lineage-scroll {
+  overflow-x: auto;
+  padding-bottom: 0.35rem;
+}
+.lineage-tree {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  min-width: max-content;
+}
+.lineage-branch {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+.lineage-children {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.lineage-node {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 11.5rem;
+  flex-shrink: 0;
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.65rem;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--card) 85%, transparent);
+  transition:
+    opacity 180ms ease,
+    border-color 180ms ease;
+}
+.lineage-node.spent {
+  opacity: 0.55;
+}
+.lineage-node--drift {
+  border-color: color-mix(in oklab, var(--malt, var(--primary)) 55%, var(--border));
+}
+.lineage-node-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+.lineage-node-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.lineage-node-gen {
+  font-size: 0.68rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-geist-mono), monospace;
+}
+.lineage-node-drift-badge {
+  color: var(--malt, var(--primary));
+}
+.lineage-node-batch {
+  align-self: flex-start;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--primary);
+  text-decoration: none;
+}
+.lineage-node-batch:hover {
+  text-decoration: underline;
+}
+.lineage-node-note {
+  margin: 0;
+  font-size: 0.68rem;
+  font-style: italic;
+  color: var(--muted-foreground);
+}
+.lineage-orphans {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-top: 1px dashed var(--border);
+  padding-top: 0.75rem;
+}
+.lineage-orphans-heading {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+}
+.lineage-orphans-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}

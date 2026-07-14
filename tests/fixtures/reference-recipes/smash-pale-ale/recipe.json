@@ -1,0 +1,61 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440099",
+  "name": "SMaSH Pale Ale (synthetic fixture)",
+  "type": "all-grain",
+  "batchSize_L": 19,
+  "boilTime_min": 60,
+  "equipmentProfileId": "550e8400-e29b-41d4-a716-446655440010",
+  "styleId": "18B",
+  "fermentables": [
+    {
+      "ingredientId": "550e8400-e29b-41d4-a716-446655440101",
+      "snapshot": { "name": "2-Row Pale", "type": "base", "ppg": 37, "color_L": 2 },
+      "amount_kg": 4.5,
+      "usage": "mash",
+      "afterBoil": false
+    }
+  ],
+  "hops": [
+    {
+      "ingredientId": "550e8400-e29b-41d4-a716-446655440201",
+      "snapshot": { "name": "Cascade", "alphaAcid_pct": 5.5, "form": "pellet" },
+      "amount_g": 28,
+      "time_min": 60,
+      "use": "boil"
+    },
+    {
+      "ingredientId": "550e8400-e29b-41d4-a716-446655440202",
+      "snapshot": { "name": "Cascade", "alphaAcid_pct": 5.5, "form": "pellet" },
+      "amount_g": 28,
+      "time_min": 15,
+      "use": "boil"
+    },
+    {
+      "ingredientId": "550e8400-e29b-41d4-a716-446655440203",
+      "snapshot": { "name": "Cascade", "alphaAcid_pct": 5.5, "form": "pellet" },
+      "amount_g": 28,
+      "time_min": 5,
+      "use": "boil"
+    }
+  ],
+  "yeasts": [
+    {
+      "ingredientId": "550e8400-e29b-41d4-a716-446655440301",
+      "snapshot": {
+        "name": "US-05",
+        "attenuation_min_pct": 75,
+        "attenuation_max_pct": 82,
+        "form": "dry"
+      },
+      "amount": 11.5
+    }
+  ],
+  "miscs": [],
+  "mashSteps": [
+    { "name": "Saccharification", "type": "infusion", "temperature_C": 66, "time_min": 60 }
+  ],
+  "notes_md": "First Plan 2 fixture. Synthetic; replace with a real recipe export when available.",
+  "createdAt": "2026-05-12T00:00:00.000Z",
+  "updatedAt": "2026-05-12T00:00:00.000Z",
+  "schemaVersion": 1
+}

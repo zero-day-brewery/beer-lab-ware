@@ -1,0 +1,44 @@
+# Beer-Lab-Ware sync origin — Caddy reverse-proxy template
+#
+# Serves the PWA static export AND reverse-proxies /state to the sync daemon on
+# the SAME origin (so HttpSyncTransport.baseUrl == window.location.origin — no
+# CORS). Prefer nginx or Traefik instead? The shape is the same: terminate TLS,
+# proxy /state to the daemon's loopback port, serve the static export for
+# everything else.
+#
+# Replace <your-domain> with your own domain (or LAN hostname) and
+# <your-server-ip> with the IP this host should bind. Caddy issues and renews
+# a TLS cert automatically for a publicly-resolvable domain; for an
+# internal-only name, point it at your own CA or drop in a static cert with a
+# `tls` directive.
+
+{
+	# Admin API on loopback only.
+	admin 127.0.0.1:2019
+}
+
+<your-domain> {
+	bind <your-server-ip>
+
+	# Sync API → the local daemon (mandatory Bearer auth is enforced IN the
+	# daemon, not here). 127.0.0.1 only; the daemon never binds a public
+	# interface.
+	handle /state* {
+		reverse_proxy 127.0.0.1:8787
+	}
+
+	# Everything else → the static PWA export (Next `output: export`).
+	handle {
+		root * /srv/beer-lab-ware/out
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+
+	# JSON access log. Caddy does NOT log request header VALUES by default, so
+	# the Authorization bearer token is never written — do not add a
+	# header-logging directive here.
+	log {
+		output file /var/log/caddy/beer-lab-ware.log
+		format json
+	}
+}

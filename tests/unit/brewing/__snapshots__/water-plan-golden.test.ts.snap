@@ -1,0 +1,21 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`water-plan golden (characterization of brew-start-gate compute) > snapshots the salt grams, so4cl, mash pH and acid (the numbers the hook must reproduce) 1`] = `
+{
+  "grams": {
+    "cacl2": 1.734,
+    "epsom": 1.696,
+    "gypsum": 1.313,
+    "nacl": 0,
+    "nahco3": 0,
+  },
+  "lactic88_mL": 1.786,
+  "mashPh": 5.542,
+  "so4cl": 1,
+  "styleKey": "pale-lager",
+  "totalWater_L": 27.875,
+  "warnings": [
+    "Source alkalinity above target — dilute with RO or add acid (see mash pH).",
+  ],
+}
+`;

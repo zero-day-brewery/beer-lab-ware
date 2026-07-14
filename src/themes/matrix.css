@@ -1,0 +1,39 @@
+/* Matrix theme — phosphor green on black. */
+html[data-theme="matrix"] {
+  --background: hsl(0 0% 0%);
+  --foreground: hsl(120 100% 50%);
+  --card: hsl(120 8% 4%);
+  --card-foreground: hsl(120 100% 50%);
+  --popover: hsl(120 8% 4%);
+  --popover-foreground: hsl(120 100% 50%);
+  --primary: hsl(120 100% 35%);
+  --primary-foreground: hsl(0 0% 0%);
+  --secondary: hsl(120 30% 10%);
+  --secondary-foreground: hsl(120 100% 50%);
+  --muted: hsl(120 30% 8%);
+  --muted-foreground: hsl(120 50% 60%);
+  --foam: hsl(120 60% 88%);
+  --copper: hsl(120 80% 30%);
+  --malt: hsl(120 90% 46%);
+  --accent: hsl(120 60% 25%);
+  --accent-foreground: hsl(0 0% 0%);
+  --destructive: hsl(0 100% 50%);
+  --destructive-foreground: hsl(0 0% 0%);
+  --border: hsl(120 50% 20%);
+  --input: hsl(120 50% 15%);
+  --ring: hsl(120 100% 50%);
+  --chart-1: hsl(120 100% 40%);
+  --chart-2: hsl(120 60% 50%);
+  --chart-3: hsl(120 40% 60%);
+  --chart-4: hsl(60 100% 50%);
+  --chart-5: hsl(180 100% 50%);
+  --radius: 0.25rem;
+  --sidebar: hsl(120 8% 4%);
+  --sidebar-foreground: hsl(120 100% 50%);
+  --sidebar-primary: hsl(120 100% 35%);
+  --sidebar-primary-foreground: hsl(0 0% 0%);
+  --sidebar-accent: hsl(120 60% 25%);
+  --sidebar-accent-foreground: hsl(0 0% 0%);
+  --sidebar-border: hsl(120 50% 20%);
+  --sidebar-ring: hsl(120 100% 50%);
+}

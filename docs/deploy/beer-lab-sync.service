@@ -1,0 +1,33 @@
+# Beer-Lab-Ware sync daemon — systemd unit template
+#
+# Runs the sync daemon (src/lib/node/sync-server.ts) via tsx, so the `@/` alias
+# resolves exactly as `npm run mcp` does. Binds 127.0.0.1 only; your reverse
+# proxy is the sole ingress. Secrets (device-token hashes, brewery file path)
+# come from the 0600 EnvironmentFile — never the unit or the repo.
+
+[Unit]
+Description=Beer-Lab-Ware sync daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=beerlab
+Group=beerlab
+WorkingDirectory=/srv/beer-lab-ware/app
+# EnvironmentFile supplies BREWERY_FILE, SYNC_TOKEN_HASHES, SYNC_PORT (see sync.env.example).
+EnvironmentFile=/etc/beer-lab-ware/sync.env
+ExecStart=/usr/bin/npx tsx src/lib/node/sync-server.ts
+Restart=on-failure
+RestartSec=3
+# Hardening: the daemon needs only its brewery.json dir writable.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/beer-lab-ware
+# The canonical brewery.json lives here — keep it on storage that survives
+# reboots/redeploys of this host.
+
+[Install]
+WantedBy=multi-user.target

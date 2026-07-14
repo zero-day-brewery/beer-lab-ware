@@ -1,0 +1,39 @@
+/* Soundwave theme — teal on deep blue with mint accents. */
+html[data-theme="soundwave"] {
+  --background: hsl(200 60% 8%);
+  --foreground: hsl(180 70% 80%);
+  --card: hsl(200 60% 12%);
+  --card-foreground: hsl(180 70% 80%);
+  --popover: hsl(200 60% 12%);
+  --popover-foreground: hsl(180 70% 80%);
+  --primary: hsl(180 100% 50%);
+  --primary-foreground: hsl(200 60% 8%);
+  --secondary: hsl(220 50% 20%);
+  --secondary-foreground: hsl(180 70% 80%);
+  --muted: hsl(210 40% 18%);
+  --muted-foreground: hsl(180 40% 65%);
+  --foam: hsl(180 60% 90%);
+  --copper: hsl(192 90% 44%);
+  --malt: hsl(175 90% 56%);
+  --accent: hsl(160 80% 40%);
+  --accent-foreground: hsl(200 60% 8%);
+  --destructive: hsl(0 70% 55%);
+  --destructive-foreground: hsl(200 60% 8%);
+  --border: hsl(200 40% 25%);
+  --input: hsl(210 40% 15%);
+  --ring: hsl(180 100% 50%);
+  --chart-1: hsl(180 100% 50%);
+  --chart-2: hsl(160 80% 50%);
+  --chart-3: hsl(140 70% 50%);
+  --chart-4: hsl(200 80% 60%);
+  --chart-5: hsl(220 50% 60%);
+  --radius: 0.5rem;
+  --sidebar: hsl(200 60% 12%);
+  --sidebar-foreground: hsl(180 70% 80%);
+  --sidebar-primary: hsl(180 100% 50%);
+  --sidebar-primary-foreground: hsl(200 60% 8%);
+  --sidebar-accent: hsl(160 80% 40%);
+  --sidebar-accent-foreground: hsl(200 60% 8%);
+  --sidebar-border: hsl(200 40% 25%);
+  --sidebar-ring: hsl(180 100% 50%);
+}

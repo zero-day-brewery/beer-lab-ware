@@ -1,0 +1,39 @@
+/* Cyberpunk theme — magenta/cyan on deep violet. */
+html[data-theme="cyberpunk"] {
+  --background: hsl(280 30% 8%);
+  --foreground: hsl(320 100% 70%);
+  --card: hsl(280 30% 12%);
+  --card-foreground: hsl(320 100% 70%);
+  --popover: hsl(280 30% 12%);
+  --popover-foreground: hsl(320 100% 70%);
+  --primary: hsl(320 100% 50%);
+  --primary-foreground: hsl(280 30% 8%);
+  --secondary: hsl(240 80% 30%);
+  --secondary-foreground: hsl(320 100% 70%);
+  --muted: hsl(280 20% 18%);
+  --muted-foreground: hsl(280 45% 78%);
+  --foam: hsl(305 80% 90%);
+  --copper: hsl(320 90% 44%);
+  --malt: hsl(330 100% 64%);
+  --accent: hsl(180 100% 50%);
+  --accent-foreground: hsl(280 30% 8%);
+  --destructive: hsl(0 100% 60%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --border: hsl(280 40% 25%);
+  --input: hsl(280 30% 15%);
+  --ring: hsl(320 100% 50%);
+  --chart-1: hsl(320 100% 50%);
+  --chart-2: hsl(180 100% 50%);
+  --chart-3: hsl(60 100% 50%);
+  --chart-4: hsl(240 80% 60%);
+  --chart-5: hsl(0 100% 60%);
+  --radius: 0.125rem;
+  --sidebar: hsl(280 30% 12%);
+  --sidebar-foreground: hsl(320 100% 70%);
+  --sidebar-primary: hsl(320 100% 50%);
+  --sidebar-primary-foreground: hsl(280 30% 8%);
+  --sidebar-accent: hsl(180 100% 50%);
+  --sidebar-accent-foreground: hsl(280 30% 8%);
+  --sidebar-border: hsl(280 40% 25%);
+  --sidebar-ring: hsl(320 100% 50%);
+}
