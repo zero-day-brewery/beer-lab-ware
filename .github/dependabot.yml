@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: ['minor', 'patch']
+    ignore:
+      # TypeScript 7 is blocked upstream: Next 16's Turbopack static-export
+      # worker crashes with the TS-7 native compiler in Linux CI. Re-test on
+      # future Next releases before lifting this.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly

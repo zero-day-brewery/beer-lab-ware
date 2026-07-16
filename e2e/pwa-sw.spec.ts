@@ -13,7 +13,10 @@ test.describe('@nonblocking pwa / service worker', () => {
   })
 
   test('service worker registers where supported', async ({ page, browserName }) => {
-    test.skip(browserName === 'webkit', 'WebKit ≠ shipping Safari; assert prerequisites only, not registration')
+    test.skip(
+      browserName === 'webkit',
+      'WebKit ≠ shipping Safari; assert prerequisites only, not registration',
+    )
     await page.goto('/')
     const registered = await page.evaluate(async () => {
       if (!('serviceWorker' in navigator)) return false
