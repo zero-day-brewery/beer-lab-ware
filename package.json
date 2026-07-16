@@ -9,6 +9,9 @@
     "url": "https://github.com/public-n0cs-code/beer-lab-ware"
   },
   "homepage": "https://github.com/public-n0cs-code/beer-lab-ware",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
