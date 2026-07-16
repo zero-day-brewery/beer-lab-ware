@@ -156,6 +156,12 @@ export function CarbonationCard() {
           hint={lineLen != null ? 'lengthen if pours foam' : 'enter psi + resistance'}
         />
       </div>
+
+      <p className="text-[0.68rem] text-muted-foreground" role="note">
+        Safety: pressure outputs are estimates. Always verify against your keg or
+        fermenter&apos;s rated MAWP and the manufacturer&apos;s specs before applying
+        pressure — over-pressurized vessels and bottles can cause injury.
+      </p>
     </CalcCard>
   )
 }

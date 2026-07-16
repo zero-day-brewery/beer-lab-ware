@@ -1,0 +1,25 @@
+Beer-Lab-Ware
+Copyright (c) Zero-Day Brewery
+
+This product includes data derived from third-party sources:
+
+BJCP 2021 Style Guidelines
+  The beer style vital statistics (OG/FG/IBU/SRM/ABV ranges) bundled in
+  src/lib/brewing/styles/ are factual data derived from the BJCP 2021 Style
+  Guidelines, https://www.bjcp.org/style/2021/, and remain subject to the
+  BJCP's own terms for the guidelines themselves. The accompanying style
+  descriptions in this repository are original summaries written for this
+  project, not BJCP text. "BJCP" is a mark of the Beer Judge Certification
+  Program; its use here is attributive only and implies no affiliation with
+  or endorsement of this project.
+
+Brewing science models
+  Calculation models (IBU: Tinseth/Rager/Garetz/Daniels; color: Morey/Mosher/
+  Daniels; yeast viability decline curves; carbonation and residual CO2) are
+  implementations of published formulas; sources are cited inline in the
+  relevant source files under src/lib/brewing/.
+
+The MIT license in LICENSE applies to the source code of this project. It does
+not grant rights to third-party data noted above beyond what those sources
+allow, and it does not grant rights to the Beer-Lab-Ware name or logo (see the
+trademark note in CONTRIBUTING.md).

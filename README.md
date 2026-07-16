@@ -50,9 +50,16 @@ npm run build
 
 Bug reports, feature ideas, and pull requests are welcome — see [`CONTRIBUTING.md`](./CONTRIBUTING.md) for how to get set up.
 
-## License
+## License, terms & privacy
 
-MIT — see [`LICENSE`](./LICENSE).
+Code is MIT — see [`LICENSE`](./LICENSE). Style vital statistics are derived from
+the [BJCP 2021 Style Guidelines](https://www.bjcp.org/style/2021/) and remain
+subject to BJCP's terms — see [`NOTICE`](./NOTICE). The Beer-Lab-Ware name and
+logo are project identity and are not covered by the MIT code grant.
+
+Plain-language use terms (including the safety note on pressure calculators) are
+in [`TERMS.md`](./TERMS.md). The privacy story — the app doesn't phone home — is
+in [`PRIVACY.md`](./PRIVACY.md).
 
 ---
 
