@@ -4,6 +4,11 @@ The **personal back-end** for Beer-Lab-Ware: a tiny always-on service that holds
 canonical brewery state so your devices sync. The **front-end stays the lightweight,
 downloadable brewery assistant** — this back-end is the "step further" for personal use.
 
+> **STATUS:** the daemon and the client sync library are built and tested, but the app
+> does not yet expose a connection UI — you cannot point the installed PWA at this
+> server yet. This runbook stands up the infrastructure ahead of that release; the
+> in-app wiring is on the roadmap and will be called out in the changelog when it ships.
+
 > These are TEMPLATES. Swap in your own domain, server IP, storage paths, and users
 > before deploying.
 
@@ -32,8 +37,13 @@ downloadable brewery assistant** — this back-end is the "step further" for per
    a public domain; use your own CA/cert for an internal-only name.
 3. `systemctl enable --now caddy beer-lab-sync`; reboot the host once to prove
    both services come back up and the cert is reused.
-4. Generate the first per-device token, add its hash to `sync.env`, install the
-   PWA on your phone, and confirm it can push/pull against the new origin.
+4. Generate the first per-device token, add its hash to `sync.env`, and smoke-test
+   the endpoint directly (the app can't connect yet — see STATUS above):
+
+   ```bash
+   curl -i -H "Authorization: Bearer <your-token>" https://<your-domain>/state
+   # expect: 204 No Content before the first push; 401 without/with a bad token
+   ```
 
 ## Reach
 This is designed for personal, self-hosted use: your devices talking to a server
