@@ -20,7 +20,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { loadBrewery, openBrewery } from '@/lib/node'
-import { buildMcpTools, createBreweryMcpServer } from '@/lib/node/mcp-server'
+import { buildMcpTools, createBreweryMcpServer, isReadOnlyModeEnv } from '@/lib/node/mcp-server'
 import {
   BATCH_ID,
   fixtureEnvelope,
@@ -128,12 +128,49 @@ describe('MCP tool-mapping layer (buildMcpTools)', () => {
     expect(reloaded.inventoryItems.find((i) => i.id === INV_ID)?.amount).toBe(50)
     expect(reloaded.stockTransactions).toHaveLength(1)
   })
+
+  it('MCP_READ_ONLY mode: the 4 write tools are not built at all', async () => {
+    const adapter = await openBrewery(file, { now: () => NOW })
+    const { tools, handlers } = buildMcpTools(adapter, { readOnly: true })
+
+    const names = tools.map((t) => t.name)
+    // 11 read tools, 0 write tools — every one still has a handler.
+    expect(tools).toHaveLength(11)
+    expect(handlers.size).toBe(11)
+    expect(names).toContain('list_recipes')
+    expect(names).toContain('get_recipe')
+    for (const writeName of ['scale_recipe', 'create_recipe', 'log_reading', 'adjust_inventory']) {
+      expect(names).not.toContain(writeName)
+      expect(handlers.has(writeName)).toBe(false)
+    }
+  })
+
+  it('default mode (readOnly omitted/false) is unchanged: writes still register', async () => {
+    const adapter = await openBrewery(file, { now: () => NOW })
+    expect(buildMcpTools(adapter).tools).toHaveLength(15)
+    expect(buildMcpTools(adapter, { readOnly: false }).tools).toHaveLength(15)
+  })
+})
+
+describe('isReadOnlyModeEnv', () => {
+  it('is true for "1" and "true" (case-insensitive), false otherwise', () => {
+    expect(isReadOnlyModeEnv({ MCP_READ_ONLY: '1' })).toBe(true)
+    expect(isReadOnlyModeEnv({ MCP_READ_ONLY: 'true' })).toBe(true)
+    expect(isReadOnlyModeEnv({ MCP_READ_ONLY: 'TRUE' })).toBe(true)
+    expect(isReadOnlyModeEnv({ MCP_READ_ONLY: ' true ' })).toBe(true)
+    expect(isReadOnlyModeEnv({ MCP_READ_ONLY: '0' })).toBe(false)
+    expect(isReadOnlyModeEnv({ MCP_READ_ONLY: 'false' })).toBe(false)
+    expect(isReadOnlyModeEnv({})).toBe(false)
+  })
 })
 
 describe('MCP server smoke — real Server + Client over an in-memory transport', () => {
-  async function connectClient(filePath: string): Promise<Client> {
+  async function connectClient(
+    filePath: string,
+    opts: { readOnly?: boolean } = {},
+  ): Promise<Client> {
     const adapter = await openBrewery(filePath, { now: () => NOW })
-    const server = createBreweryMcpServer(adapter)
+    const server = createBreweryMcpServer(adapter, opts)
     const [clientT, serverT] = InMemoryTransport.createLinkedPair()
     const client = new Client({ name: 'test-client', version: '0.0.0' })
     await Promise.all([server.connect(serverT), client.connect(clientT)])
@@ -183,6 +220,35 @@ describe('MCP server smoke — real Server + Client over an in-memory transport'
     const res = await client.callTool({ name: 'does_not_exist', arguments: {} })
     expect(res.isError).toBe(true)
     expect(resultText(res as never)).toMatch(/Unknown tool/)
+    await client.close()
+  })
+
+  it('read-only mode: tools/list omits the write tools entirely', async () => {
+    const client = await connectClient(file, { readOnly: true })
+    const { tools } = await client.listTools()
+    const names = tools.map((t) => t.name)
+    expect(names).toContain('list_recipes')
+    expect(names).toContain('calc_recipe')
+    expect(names).not.toContain('scale_recipe')
+    expect(names).not.toContain('log_reading')
+    expect(tools).toHaveLength(11)
+    await client.close()
+  })
+
+  it('read-only mode: reads still work; calling a write tool name is an unregistered tool', async () => {
+    const client = await connectClient(file, { readOnly: true })
+
+    const readRes = await client.callTool({ name: 'list_recipes', arguments: {} })
+    expect(readRes.isError).toBeFalsy()
+
+    const writeRes = await client.callTool({ name: 'log_reading', arguments: {} })
+    expect(writeRes.isError).toBe(true)
+    expect(resultText(writeRes as never)).toMatch(/Unknown tool/)
+
+    // Confirms it's truly unregistered, not just rejected — the file is untouched
+    // (still exactly the 2 fixture readings for this batch, no third added).
+    const reloaded = await loadBrewery(file)
+    expect(reloaded.readings.filter((r) => r.batchId === BATCH_ID)).toHaveLength(2)
     await client.close()
   })
 })

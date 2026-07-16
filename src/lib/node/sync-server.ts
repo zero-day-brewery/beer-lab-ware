@@ -5,24 +5,30 @@
  * holds the canonical brewery state as a `DumpV8` file and exposes exactly what
  * the in-app {@link HttpSyncTransport} client calls:
  *
- *   GET  /state  → 200 + the stored DumpV8 verbatim, or 204 when none exists yet.
- *   PUT  /state  → validate + persist the client's merged DumpV8 as the new canonical.
+ *   GET  /state   → 200 + the stored DumpV8 verbatim, or 204 when none exists yet.
+ *   PUT  /state   → validate + persist the client's merged DumpV8 as the new canonical.
+ *   GET  /health  → 200 + { ok, daemonVersion, supportedDumpVersions }. UNAUTHENTICATED —
+ *                   for uptime monitoring; never touches or leaks brewery data.
  *
  * The merge is entirely CLIENT-side (`syncOnce`); the daemon is a dumb
  * store-and-return-the-whole-dump slot — NO server-side merge/delta/cursor.
  *
  * Security (single-user, multi-device):
- *   - A per-device Bearer token is MANDATORY on BOTH methods (network
- *     reachability to your server is defense-in-depth, not the gate). Tokens
- *     are compared as sha256 hashes with `timingSafeEqual` — plaintext tokens
- *     never live server-side.
- *   - The Authorization header + request body are NEVER logged.
+ *   - A per-device Bearer token is MANDATORY on both `/state` methods (network
+ *     reachability to your server is defense-in-depth, not the gate). `/health`
+ *     is the sole unauthenticated route, by design, and returns no brewery data.
+ *     Tokens are compared as sha256 hashes with `timingSafeEqual` — plaintext
+ *     tokens never live server-side.
+ *   - The Authorization header + request body are NEVER logged. A 401 logs one
+ *     stderr line (timestamp, remote address, path only — no token material).
  *   - Bind to 127.0.0.1 only; a reverse proxy (Caddy/nginx/Traefik) is the sole ingress.
  *
  * Integrity:
  *   - PUT validates the envelope (`parseEnvelope` → Zod every row) AND the ledger
  *     invariant (`amount === Σ deltas`) → 400 on a bad dump, so one buggy device
  *     can't poison canonical.
+ *   - Before a PUT overwrites the canonical file, `rotateGenerations` snapshots the
+ *     prior version to `<file>.<timestamp>.bak` (see `SYNC_KEEP_GENERATIONS`).
  *   - Writes go through the atomic temp+rename (`atomicWriteJson`) serialized behind
  *     a mutex, so a concurrent GET never reads a torn file.
  *
@@ -33,8 +39,21 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { pathToFileURL } from 'node:url'
-import { assertLedgerInvariant, atomicWriteJson, parseEnvelope } from '@/lib/node/brewery-store'
+import {
+  assertLedgerInvariant,
+  atomicWriteJson,
+  parseEnvelope,
+  rotateGenerations,
+  SUPPORTED_VERSIONS,
+} from '@/lib/node/brewery-store'
 import { createMutex } from '@/lib/node/mutex'
+import packageJson from '../../../package.json' with { type: 'json' }
+
+/** The running package's version — the default `GET /health` `daemonVersion`. */
+const DAEMON_VERSION: string = packageJson.version
+
+/** Default number of prior generations `PUT /state` retains (see `SYNC_KEEP_GENERATIONS`). */
+const DEFAULT_KEEP_GENERATIONS = 10
 
 /** sha256 hex of a string — used to hash device tokens (never store plaintext). */
 export function sha256Hex(input: string): string {
@@ -48,9 +67,36 @@ export interface SyncServerOptions {
   tokenHashes: ReadonlySet<string>
   /** Reject a PUT body larger than this (bytes). Default 64 MB. */
   maxBodyBytes?: number
+  /** `GET /health` `daemonVersion`. Defaults to this package's `version`. */
+  daemonVersion?: string
+  /** Prior generations `PUT /state` retains via `rotateGenerations`. Default 10, 0 disables. */
+  keepGenerations?: number
+  /**
+   * Sink for the one-line 401 audit log (timestamp, remote address, path —
+   * NEVER token material). Defaults to writing to `process.stderr`. Injectable
+   * for tests.
+   */
+  authFailureLog?: (line: string) => void
 }
 
 const DEFAULT_MAX_BODY = 64 * 1024 * 1024
+
+/** First `X-Forwarded-For` hop when present (reference deploy is behind Caddy), else the socket peer. */
+function remoteAddressOf(req: IncomingMessage): string {
+  const xff = req.headers['x-forwarded-for']
+  const first = Array.isArray(xff) ? xff[0] : xff
+  if (first) {
+    const addr = first.split(',')[0]?.trim()
+    if (addr) return addr
+  }
+  return req.socket.remoteAddress ?? 'unknown'
+}
+
+/** One-line 401 audit record: timestamp + remote address + path. NEVER token material. */
+function logAuthFailure(sink: (line: string) => void, req: IncomingMessage, path: string): void {
+  const at = new Date().toISOString()
+  sink(`[sync] auth failure at=${at} remote=${remoteAddressOf(req)} path=${path}\n`)
+}
 
 /** JSON response with caching disabled; never echoes request auth/body. */
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -101,14 +147,30 @@ function readBody(req: IncomingMessage, maxBytes: number): Promise<string> {
 
 /**
  * Build the request handler. Exposed for tests (drive it via a real http.Server on
- * an ephemeral port). Only `/state` is served; everything else is 404.
+ * an ephemeral port). Serves `/health` (unauthenticated) and `/state`; everything
+ * else is 404.
  */
 export function createSyncHandler(opts: SyncServerOptions) {
   const maxBody = opts.maxBodyBytes ?? DEFAULT_MAX_BODY
+  const daemonVersion = opts.daemonVersion ?? DAEMON_VERSION
+  const keepGenerations = opts.keepGenerations ?? DEFAULT_KEEP_GENERATIONS
+  const authFailureLog = opts.authFailureLog ?? ((line: string) => process.stderr.write(line))
   const runExclusive = createMutex()
 
   return async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const path = (req.url ?? '').split('?')[0].replace(/\/+$/, '') || '/'
+
+    // Unauthenticated liveness probe — NEVER reads/leaks brewery data, no auth
+    // header required. Must stay ahead of the /state auth gate below.
+    if (path === '/health') {
+      if (req.method !== 'GET') {
+        sendJson(res, 405, { error: 'method not allowed' })
+        return
+      }
+      sendJson(res, 200, { ok: true, daemonVersion, supportedDumpVersions: SUPPORTED_VERSIONS })
+      return
+    }
+
     if (path !== '/state') {
       sendJson(res, 404, { error: 'not found' })
       return
@@ -116,6 +178,7 @@ export function createSyncHandler(opts: SyncServerOptions) {
 
     // Auth gates BOTH methods, BEFORE reading any body.
     if (!verifyBearer(req.headers.authorization, opts.tokenHashes)) {
+      logAuthFailure(authFailureLog, req, path)
       sendJson(res, 401, { error: 'unauthorized' })
       return
     }
@@ -160,9 +223,15 @@ export function createSyncHandler(opts: SyncServerOptions) {
         return
       }
       // Persist the client's DumpV8 VERBATIM (preserve meta/exportedAt/version),
-      // atomically, serialized so a concurrent GET never reads a torn file.
+      // atomically, serialized so a concurrent GET never reads a torn file. The
+      // prior generation is snapshotted to a `.bak` FIRST (no-op on the very
+      // first PUT or when generations are disabled); this never touches the
+      // atomic temp+rename of the main write itself.
       try {
-        await runExclusive(() => atomicWriteJson(opts.filePath, parsed))
+        await runExclusive(async () => {
+          await rotateGenerations(opts.filePath, keepGenerations)
+          await atomicWriteJson(opts.filePath, parsed)
+        })
       } catch {
         sendJson(res, 500, { error: 'write failed' })
         return
@@ -188,9 +257,10 @@ export function createSyncServer(opts: SyncServerOptions): Server {
 
 /**
  * CLI entry — read config from the environment and listen on 127.0.0.1.
- *   BREWERY_FILE       path to the canonical brewery.json (required)
- *   SYNC_TOKEN_HASHES  comma-separated sha256-hex device-token hashes (required)
- *   SYNC_PORT          listen port (default 8787)
+ *   BREWERY_FILE           path to the canonical brewery.json (required)
+ *   SYNC_TOKEN_HASHES      comma-separated sha256-hex device-token hashes (required)
+ *   SYNC_PORT              listen port (default 8787)
+ *   SYNC_KEEP_GENERATIONS  prior `.bak` generations to retain on PUT (default 10, 0 disables)
  * Caddy is the sole ingress; this daemon never binds a public interface.
  */
 export function startFromEnv(): Server {
@@ -204,7 +274,12 @@ export function startFromEnv(): Server {
     throw new Error('SYNC_TOKEN_HASHES must list at least one sha256-hex device-token hash')
   }
   const port = Number(process.env.SYNC_PORT ?? 8787)
-  const server = createSyncServer({ filePath, tokenHashes: new Set(hashes) })
+  const keepGenerationsRaw = process.env.SYNC_KEEP_GENERATIONS?.trim()
+  const keepGenerations =
+    keepGenerationsRaw && /^\d+$/.test(keepGenerationsRaw)
+      ? Number(keepGenerationsRaw)
+      : DEFAULT_KEEP_GENERATIONS
+  const server = createSyncServer({ filePath, tokenHashes: new Set(hashes), keepGenerations })
   server.listen(port, '127.0.0.1', () => {
     // Log the bind only — NEVER tokens, auth headers, or bodies.
     console.error(

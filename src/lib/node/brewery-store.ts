@@ -91,7 +91,8 @@ export interface BreweryFile {
   tables: BreweryCollections
 }
 
-const SUPPORTED_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8] as const
+/** Envelope versions this store can read. Also reported by `GET /health`. */
+export const SUPPORTED_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8] as const
 
 /** A fresh, empty set of collections (all tables present, all empty). */
 export function emptyCollections(): BreweryCollections {
@@ -217,6 +218,89 @@ export async function atomicWriteJson(filePath: string, data: unknown): Promise<
     await fs.rm(tmp, { force: true }).catch(() => {})
     throw err
   }
+}
+
+const BACKUP_SUFFIX = '.bak'
+
+/** `2026-07-16T10:15:00.000Z` → `2026-07-16T101500Z` (filename-safe, second precision). */
+function backupTimestamp(d: Date): string {
+  return d
+    .toISOString()
+    .replace(/:/g, '')
+    .replace(/\.\d+Z$/, 'Z')
+}
+
+/** True when `entryName` is a rotated backup of `filePath` (`<basename>.<...>.bak`). */
+function isBackupOf(filePath: string, entryName: string): boolean {
+  const base = path.basename(filePath)
+  return entryName.startsWith(`${base}.`) && entryName.endsWith(BACKUP_SUFFIX)
+}
+
+/**
+ * Copy `contents` to `<filePath>.<stamp>.bak`, using `COPYFILE_EXCL` so two
+ * generations landing in the same wall-clock second never silently clobber each
+ * other — on a name collision a `-N` counter is appended before `.bak`.
+ */
+async function writeUniqueBackup(filePath: string, stamp: string, contents: Buffer): Promise<void> {
+  let n = 0
+  for (;;) {
+    const suffix = n === 0 ? '' : `-${n}`
+    const candidate = `${filePath}.${stamp}${suffix}${BACKUP_SUFFIX}`
+    try {
+      await fs.writeFile(candidate, contents, { flag: 'wx' })
+      return
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+        n += 1
+        continue
+      }
+      throw err
+    }
+  }
+}
+
+/** Delete the oldest backups (by mtime) of `filePath` so at most `keep` remain. */
+async function pruneGenerations(filePath: string, keep: number): Promise<void> {
+  const dir = path.dirname(filePath)
+  const names = (await fs.readdir(dir)).filter((n) => isBackupOf(filePath, n))
+  if (names.length <= keep) return
+  const withMtime = await Promise.all(
+    names.map(async (n) => {
+      const full = path.join(dir, n)
+      const { mtimeMs } = await fs.stat(full)
+      return { full, mtimeMs }
+    }),
+  )
+  withMtime.sort((a, b) => a.mtimeMs - b.mtimeMs) // oldest first
+  const toDelete = withMtime.slice(0, withMtime.length - keep)
+  await Promise.all(toDelete.map((f) => fs.rm(f.full, { force: true })))
+}
+
+/**
+ * Rotate server-side generations of `filePath` BEFORE it gets overwritten: copy
+ * the current file to `<filePath>.<ISO-timestamp>.bak`, then prune the oldest
+ * backups so at most `keep` remain. A no-op when:
+ *   - `keep <= 0` (generations disabled), or
+ *   - `filePath` doesn't exist yet (the very first PUT has nothing to back up).
+ * Independent of `atomicWriteJson`'s temp+rename — callers await this BEFORE
+ * calling `atomicWriteJson` so the pre-overwrite snapshot is durable before the
+ * canonical file changes; it never touches the atomic write path itself.
+ */
+export async function rotateGenerations(
+  filePath: string,
+  keep: number,
+  now: () => Date = () => new Date(),
+): Promise<void> {
+  if (keep <= 0) return
+  let current: Buffer
+  try {
+    current = await fs.readFile(filePath)
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw err
+  }
+  await writeUniqueBackup(filePath, backupTimestamp(now()), current)
+  await pruneGenerations(filePath, keep)
 }
 
 /**

@@ -12,12 +12,32 @@ downloadable brewery assistant** — this back-end is the "step further" for per
 > These are TEMPLATES. Swap in your own domain, server IP, storage paths, and users
 > before deploying.
 
+## Auth is MANDATORY — always
+
+Every device needs a per-device Bearer token. There is no token-optional / LAN-trust
+mode: `GET /state` and `PUT /state` reject every request without a valid
+`Authorization: Bearer <token>` header, 401, before touching the filesystem —
+regardless of whether the daemon is reachable only on your LAN, over your own VPN, or
+publicly. Network reachability is defense-in-depth on top of auth, never a substitute
+for it. The daemon won't even start without at least one token hash configured
+(`SYNC_TOKEN_HASHES must list at least one sha256-hex device-token hash`).
+
+The one exception is `GET /health` (see below) — deliberately unauthenticated, and it
+never returns brewery data, so it isn't a hole in the above.
+
 ## What's already built + tested (this repo)
-- **`src/lib/node/sync-server.ts`** — the daemon. `GET/PUT /state`, mandatory hashed
-  Bearer auth (`timingSafeEqual`), 204-when-empty, envelope + ledger-invariant
-  validation on PUT, atomic write behind a mutex, binds 127.0.0.1. Run: `npm run sync`.
+- **`src/lib/node/sync-server.ts`** — the daemon.
+  - `GET/PUT /state` — mandatory hashed Bearer auth (`timingSafeEqual`), 204-when-empty,
+    envelope + ledger-invariant validation on PUT, atomic write behind a mutex, binds
+    127.0.0.1. A rejected (401) request logs one stderr line — timestamp, remote
+    address, path — and NEVER the token or any part of the Authorization header.
+  - `GET /health` — **unauthenticated**, `200 { ok, daemonVersion, supportedDumpVersions }`,
+    never reads or leaks brewery data. For uptime monitoring (see below).
+  - Before each `PUT` overwrites the canonical file, the prior generation is
+    snapshotted to a `.bak` (`SYNC_KEEP_GENERATIONS`, see below) — independent of, and
+    without weakening, the atomic temp+rename of the write itself.
 - **`src/lib/node/brewery-store.ts`** — advanced to DumpV8 (matches the client) + the
-  `assertLedgerInvariant` guard.
+  `assertLedgerInvariant` guard + `rotateGenerations` (the `.bak` snapshot/prune logic).
 - **`public/sw.js`** — `/state` is never cached (would poison pulls).
 - Tests: `tests/unit/node/{brewery-store,sync-server,sync-secret-exclusion}.test.ts`,
   `tests/unit/ui/sw-state-bypass.test.ts`.
@@ -25,28 +45,147 @@ downloadable brewery assistant** — this back-end is the "step further" for per
 ## Files here
 | File | Goes to | Purpose |
 |---|---|---|
-| `Caddyfile` | `/etc/caddy/Caddyfile` | Serve `out/` + reverse-proxy `/state` |
-| `beer-lab-sync.service` | `/etc/systemd/system/` | Run the daemon (`enable --now`) |
-| `sync.env.example` | `/etc/beer-lab-ware/sync.env` (0600) | `BREWERY_FILE`, `SYNC_TOKEN_HASHES`, `SYNC_PORT` |
+| `Caddyfile` | `/etc/caddy/Caddyfile` | Serve `out/` + reverse-proxy `/state` and `/health`, plus baseline security headers |
+| `beer-lab-sync.service` | `/etc/systemd/system/` | Run the pre-built daemon bundle (`enable --now`) |
+| `sync.env.example` | `/etc/beer-lab-ware/sync.env` (0600) | `BREWERY_FILE`, `SYNC_TOKEN_HASHES`, `SYNC_PORT`, `SYNC_KEEP_GENERATIONS` |
+
+## Building the daemon
+
+The daemon and MCP server ship as source (`src/lib/node/*.ts`); production runs a
+**pre-built single-file bundle**, not `tsx` against a live checkout:
+
+```bash
+npm ci
+npm run build:daemon
+# → dist/sync-server.mjs, dist/mcp-server.mjs (plain ESM, all deps bundled, node22 target)
+```
+
+Both bundles include `@modelcontextprotocol/sdk` — it bundles cleanly with esbuild (no
+dynamic requires, no native bindings), so nothing is marked `external`. Re-run
+`npm run build:daemon` after every source change and before every deploy; `dist/` is
+gitignored, so the bundle is never committed — it's a build artifact, regenerated on
+the server (or by your CI) from the checked-out source.
 
 ## Bring-up order
 1. Provision a small always-on host (VM, container, or spare machine) that your
    devices can reach — LAN-only, over your own VPN, or public, your call.
-2. Run the sync server behind any reverse proxy (Caddy/nginx/Traefik); point the
+2. Clone the repo to the host, then build the daemon bundle:
+   ```bash
+   git clone <your-fork-or-checkout> /srv/beer-lab-ware/app
+   cd /srv/beer-lab-ware/app
+   npm ci
+   npm run build:daemon
+   ```
+3. Run the sync server behind any reverse proxy (Caddy/nginx/Traefik); point the
    app at `https://<your-domain>`. Caddy's automatic HTTPS handles the cert for
    a public domain; use your own CA/cert for an internal-only name.
-3. `systemctl enable --now caddy beer-lab-sync`; reboot the host once to prove
+4. Generate the first per-device token + its hash (see "Token lifecycle" below), add
+   the hash to `sync.env`.
+5. `systemctl enable --now caddy beer-lab-sync`; reboot the host once to prove
    both services come back up and the cert is reused.
-4. Generate the first per-device token, add its hash to `sync.env`, and smoke-test
-   the endpoint directly (the app can't connect yet — see STATUS above):
+6. Smoke-test both endpoints directly (the app can't connect yet — see STATUS above):
 
    ```bash
+   curl -s https://<your-domain>/health
+   # expect: 200 {"ok":true,"daemonVersion":"0.1.0","supportedDumpVersions":[1,2,3,4,5,6,7,8]}
+
    curl -i -H "Authorization: Bearer <your-token>" https://<your-domain>/state
    # expect: 204 No Content before the first push; 401 without/with a bad token
    ```
+
+## Token lifecycle
+
+The daemon never sees or stores a plaintext token — only its sha256-hex hash,
+compared with `timingSafeEqual` (`sha256Hex` in `src/lib/node/sync-server.ts`). Getting
+the hash algorithm exactly right matters: it's `sha256(token_bytes_utf8)`, hex-encoded,
+lowercase, no trailing whitespace or extra characters.
+
+**Generate a token + its hash** (run on a trusted machine, e.g. your laptop, never
+the untrusted device itself):
+
+```bash
+TOK=$(openssl rand -hex 32)
+echo "token (give to the device): $TOK"
+printf '%s' "$TOK" | shasum -a 256 | cut -d' ' -f1   # → the hash to add to SYNC_TOKEN_HASHES
+```
+
+`printf '%s'` (not `echo`) matters — it emits the token with no trailing newline, so the
+hash matches exactly what `sha256Hex()` computes over the raw Bearer value the device
+sends. `cut -d' ' -f1` strips `shasum`'s trailing `  -` filename marker; copying the
+untrimmed `shasum` output into `SYNC_TOKEN_HASHES` produces a value that fails the
+daemon's `^[0-9a-f]{64}$` hash-format check and is silently dropped from the accepted
+set (the daemon then either refuses to start, if it was the only hash, or simply never
+accepts that device's requests) — always use the trimmed one-liner above.
+
+**Add the device**: append the hash to the comma-separated `SYNC_TOKEN_HASHES` in
+`sync.env`, restart the daemon (`systemctl restart beer-lab-sync`), give the device its
+plaintext token (out of band — never over an unauthenticated channel). The token itself
+lives only in the device's local storage; it is never a synced/backed-up field (see
+`tests/unit/node/sync-secret-exclusion.test.ts`).
+
+**Rotate a token** (e.g. a device was lost, or you rotate on a schedule):
+1. Generate a NEW token + hash as above.
+2. Add the new hash to `SYNC_TOKEN_HASHES` **alongside** the old one (comma-separated) —
+   don't remove the old hash yet.
+3. `systemctl restart beer-lab-sync` so the daemon accepts both old and new tokens.
+4. Move the device over to the new plaintext token.
+5. Once every device that used the old token has confirmed working on the new one,
+   delete the OLD hash from `SYNC_TOKEN_HASHES` and restart again — this is the
+   revocation step; a hash removed from the list is rejected on the very next request.
+
+**Revoke a device immediately** (lost/compromised device, no replacement token needed
+yet): delete its hash from `SYNC_TOKEN_HASHES`, restart the daemon. No grace period —
+the very next request with that token 401s.
+
+## Generation backups (`SYNC_KEEP_GENERATIONS`)
+
+Before each `PUT /state` overwrites the canonical `brewery.json`, the daemon snapshots
+the file it's about to replace to `<file>.<ISO-timestamp>.bak` (colon-free, second
+precision — e.g. `brewery.json.2026-07-16T101500Z.bak`), then prunes the oldest
+snapshots so at most `SYNC_KEEP_GENERATIONS` remain (default **10**; set to `0` to
+disable generation backups entirely). The very first PUT to a fresh install makes no
+backup — there's nothing prior to snapshot yet. This is independent of, and never
+weakens, the atomic temp+rename of the main write: a backup failure never corrupts or
+blocks the canonical write, and the canonical file is never left partially written.
+
+**Restore from a generation** (e.g. a buggy client pushed bad-but-valid data and you
+want the state from before that push):
+
+```bash
+systemctl stop beer-lab-sync                 # avoid a write racing the restore
+cd /var/lib/beer-lab-ware                    # or wherever BREWERY_FILE lives
+ls -1 brewery.json.*.bak                     # names sort chronologically (fixed-width timestamp)
+cp brewery.json brewery.json.pre-restore.bak # keep the current state too, just in case
+cp brewery.json.<the-generation-you-want>.bak brewery.json
+systemctl start beer-lab-sync
+```
+
+Every device pulls the restored state on its next sync (client-side merge still
+applies — a device with newer local changes than the restored generation will merge
+them back in on its next `syncOnce`, so a true rollback may also require clearing or
+overriding local state on each device; this restores the SERVER's canonical copy).
+
+## Uptime monitoring (`GET /health`)
+
+`GET /health` is unauthenticated by design (no Bearer token needed) and never reads or
+returns brewery data — safe to point any external uptime checker (UptimeRobot,
+Healthchecks.io, a Caddy/nginx-level probe, your own cron+curl) directly at
+`https://<your-domain>/health`:
+
+```bash
+curl -s https://<your-domain>/health
+# {"ok":true,"daemonVersion":"0.1.0","supportedDumpVersions":[1,2,3,4,5,6,7,8]}
+```
+
+`daemonVersion` is the running daemon's `package.json` version (useful for confirming a
+deploy actually picked up a new build); `supportedDumpVersions` is the set of
+backup-envelope versions this daemon build can read — compare it against the envelope
+version your app version writes if you ever see sync rejections after upgrading only
+one side (see the changelog's "Data-migration guarantee" / "Self-hosters" notes at the
+repo root).
 
 ## Reach
 This is designed for personal, self-hosted use: your devices talking to a server
 you control. Whether that's LAN-only, over your own VPN/tunnel, or exposed
 publicly behind auth is entirely a function of your own network — nothing here
-assumes one topology over another.
+assumes one topology over another. Auth (see above) is mandatory regardless of topology.

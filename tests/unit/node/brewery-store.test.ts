@@ -1,16 +1,18 @@
 /**
- * Node brewery-store — DumpV8 migration + ledger-invariant guard.
+ * Node brewery-store — DumpV8 migration + ledger-invariant guard + PUT
+ * generation rotation.
  *
  * Covers the Track B back-end requirements: the file store round-trips a real
  * client DumpV8 (incl. the new `yeastLots` + `seedTombstones` tables + `meta`),
- * still reads older v1..v6 dumps (newer tables → empty), and the exported
+ * still reads older v1..v6 dumps (newer tables → empty), the exported
  * `assertLedgerInvariant` rejects a dump whose cached `amount` diverges from its
- * ledger (`amount === Σ deltas`).
+ * ledger (`amount === Σ deltas`), and `rotateGenerations` snapshots + prunes the
+ * `.bak` history the sync daemon keeps before each PUT overwrite.
  */
 
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { YeastLot } from '@/lib/brewing/types/yeast-lot'
 import {
@@ -19,6 +21,8 @@ import {
   emptyCollections,
   loadBrewery,
   parseEnvelope,
+  rotateGenerations,
+  SUPPORTED_VERSIONS,
   saveBrewery,
 } from '@/lib/node/brewery-store'
 import { fixtureCollections } from '../../fixtures/node/brewery-fixture'
@@ -86,6 +90,13 @@ describe('brewery-store DumpV8', () => {
     expect(() => parseEnvelope({ version: 9, tables: {} })).toThrow(/Unsupported/)
   })
 
+  it('exports SUPPORTED_VERSIONS matching the versions parseEnvelope accepts', () => {
+    expect(SUPPORTED_VERSIONS).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+    for (const v of SUPPORTED_VERSIONS) {
+      expect(() => parseEnvelope({ version: v, tables: {} })).not.toThrow()
+    }
+  })
+
   it('validates a malformed v8 meta sidecar', () => {
     expect(() => parseEnvelope({ version: 8, meta: { dumpVersion: 'nope' }, tables: {} })).toThrow()
   })
@@ -105,6 +116,79 @@ describe('brewery-store DumpV8', () => {
       const c = fixtureCollections()
       c.inventoryItems[0] = { ...c.inventoryItems[0], amount: 50 + 1e-9 }
       expect(() => assertLedgerInvariant(c)).not.toThrow()
+    })
+  })
+
+  describe('rotateGenerations', () => {
+    async function backupsIn(dir: string): Promise<string[]> {
+      return (await readdir(dir)).filter((n) => n.endsWith('.bak')).sort()
+    }
+
+    it('is a no-op when the file does not exist yet (first-ever write)', async () => {
+      const file = await tmpFile()
+      await expect(rotateGenerations(file, 10)).resolves.toBeUndefined()
+      expect(await backupsIn(dirname(file))).toEqual([])
+    })
+
+    it('is a no-op when keep <= 0, even with an existing file', async () => {
+      const file = await tmpFile()
+      await writeFile(file, 'v1', 'utf8')
+      await rotateGenerations(file, 0)
+      expect(await backupsIn(dirname(file))).toEqual([])
+    })
+
+    it('copies the CURRENT file to a filename-safe ISO-timestamped .bak', async () => {
+      const file = await tmpFile()
+      await writeFile(file, 'v1', 'utf8')
+      const now = () => new Date('2026-07-16T10:15:00.000Z')
+      await rotateGenerations(file, 10, now)
+
+      const backups = await backupsIn(dirname(file))
+      expect(backups).toEqual(['brewery.json.2026-07-16T101500Z.bak'])
+      expect(await readFile(join(dirname(file), backups[0]), 'utf8')).toBe('v1')
+    })
+
+    it('appends a counter suffix instead of clobbering when two rotations land in the same second', async () => {
+      const file = await tmpFile()
+      const now = () => new Date('2026-07-16T10:15:00.000Z') // fixed clock — forces a collision
+      await writeFile(file, 'v1', 'utf8')
+      await rotateGenerations(file, 10, now)
+      await writeFile(file, 'v2', 'utf8')
+      await rotateGenerations(file, 10, now)
+
+      const dir = dirname(file)
+      expect(await backupsIn(dir)).toEqual([
+        'brewery.json.2026-07-16T101500Z-1.bak',
+        'brewery.json.2026-07-16T101500Z.bak',
+      ])
+      expect(await readFile(join(dir, 'brewery.json.2026-07-16T101500Z.bak'), 'utf8')).toBe('v1')
+      expect(await readFile(join(dir, 'brewery.json.2026-07-16T101500Z-1.bak'), 'utf8')).toBe('v2')
+    })
+
+    it('prunes the oldest-by-mtime backups so at most `keep` remain', async () => {
+      const file = await tmpFile()
+      await writeFile(file, 'v0', 'utf8') // seed the first canonical version
+      const baseMs = Date.parse('2026-07-16T10:00:00.000Z')
+      let tick = 0
+      const now = () => new Date(baseMs + tick++ * 1000) // distinct, increasing stamps
+
+      for (let k = 1; k <= 4; k++) {
+        await rotateGenerations(file, 2, now) // snapshot the version about to be replaced
+        await writeFile(file, `v${k}`, 'utf8')
+      }
+
+      expect(await backupsIn(dirname(file))).toHaveLength(2)
+    })
+
+    it('does not touch the atomic write path — saveBrewery still round-trips after rotation', async () => {
+      const file = await tmpFile()
+      await saveBrewery(file, fixtureCollections(), '2026-01-01T00:00:00.000Z')
+      await rotateGenerations(file, 5)
+      await saveBrewery(file, fixtureCollections(), '2026-01-02T00:00:00.000Z')
+
+      const back = await loadBrewery(file)
+      expect(back.recipes).toHaveLength(fixtureCollections().recipes.length)
+      expect(await backupsIn(dirname(file))).toHaveLength(1)
     })
   })
 })
