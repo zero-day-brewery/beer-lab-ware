@@ -1,0 +1,31 @@
+name: Feature request
+description: Propose an improvement or new capability
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the brewing/workflow problem first, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What you'd like to see. Sketches, examples from other tools, etc.
+    validations:
+      required: false
+  - type: dropdown
+    id: local-first
+    attributes:
+      label: Local-first check
+      description: >
+        This app works with no account and no server, permanently. Does your
+        proposal fit that, or does it need a server/service component?
+      options:
+        - Fully local (works offline in the browser)
+        - Needs the optional self-host daemon
+        - Needs some new service (explain above)
+    validations:
+      required: true

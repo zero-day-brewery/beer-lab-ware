@@ -1,0 +1,53 @@
+name: Bug report
+description: Something broke or behaves wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Do not file security issues here** — use the
+        *Security* tab (private vulnerability reporting) instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+      placeholder: Steps to reproduce, expected vs actual.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics export
+      description: >
+        Open **/diagnostics** in the app and paste the relevant parts (app
+        version, build, storage state, recent errors). This is the fastest way
+        for us to see what's going on. Redact anything you consider private.
+      render: text
+    validations:
+      required: false
+  - type: input
+    id: environment
+    attributes:
+      label: Browser + OS
+      placeholder: e.g. Safari 19 on iOS 19, Chrome 140 on Windows 11
+    validations:
+      required: true
+  - type: dropdown
+    id: install-mode
+    attributes:
+      label: How are you running the app?
+      options:
+        - Installed PWA (home screen / dock)
+        - Browser tab
+        - Local dev server (npm run dev)
+        - Self-hosted static build
+    validations:
+      required: true
+  - type: textarea
+    id: data-impact
+    attributes:
+      label: Was any data lost or corrupted?
+      description: If yes, say what — and whether you have a backup/export from before.
+    validations:
+      required: false
