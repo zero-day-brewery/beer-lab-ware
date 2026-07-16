@@ -6,6 +6,17 @@
 const PRECACHE = /*__PRECACHE__*/[]/*__END__*/
 const PRECACHE_VERSION = '__VERSION__'
 
+// Deploy base path, derived from the registration scope so the same file works
+// at the origin root ('' ) or under a subpath ('/beer-lab-ware'). Registration
+// scope defaults to the SW's own directory, so this needs no build-time value.
+const BASE = (() => {
+  try {
+    return new URL(self.registration.scope).pathname.replace(/\/$/, '')
+  } catch {
+    return ''
+  }
+})()
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
@@ -49,10 +60,10 @@ self.addEventListener('fetch', (event) => {
   // Track B sync endpoint: NEVER cache /state. It's the live canonical brewery
   // state; a cached (esp. 204/empty) response would make every future pull read
   // stale/null and silently poison sync. Pass straight through to the network.
-  if (url.pathname === '/state' || url.pathname.startsWith('/state/')) return
+  if (url.pathname === `${BASE}/state` || url.pathname.startsWith(`${BASE}/state/`)) return
 
   // Immutable hashed chunks → cache-first.
-  if (url.pathname.startsWith('/_next/static/')) {
+  if (url.pathname.startsWith(`${BASE}/_next/static/`)) {
     event.respondWith(caches.match(req).then((cached) => cached ?? fetchAndCache(req)))
     return
   }
@@ -63,7 +74,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       caches.match(req).then((cached) => {
         const network = fetchAndCache(req).catch(() =>
-          caches.match('/').then((c) => c ?? offline()),
+          caches.match(`${BASE}/`).then((c) => c ?? offline()),
         )
         return cached ?? network
       }),

@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci
+      - name: Quality gate
+        run: |
+          npm run typecheck
+          npm run lint
+          npm test
+      - name: Build static export (root deploy)
+        run: npm run build
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: e2e against the exact release bundle
+        run: npm run e2e -- --project=chromium
+      - name: Package artifact
+        run: |
+          tar -czf "beer-lab-ware-${GITHUB_REF_NAME}.tar.gz" -C out .
+          sha256sum "beer-lab-ware-${GITHUB_REF_NAME}.tar.gz" > "beer-lab-ware-${GITHUB_REF_NAME}.tar.gz.sha256"
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: beer-lab-ware-${{ github.ref_name }}.tar.gz
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "Beer-Lab-Ware $GITHUB_REF_NAME" \
+            --generate-notes \
+            "beer-lab-ware-${GITHUB_REF_NAME}.tar.gz" \
+            "beer-lab-ware-${GITHUB_REF_NAME}.tar.gz.sha256"

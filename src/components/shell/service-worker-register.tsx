@@ -23,7 +23,8 @@ export function ServiceWorkerRegister() {
       return
     }
 
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
+    const base = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
+    navigator.serviceWorker.register(`${base}/sw.js`).catch((err) => {
       console.warn('Service worker registration failed:', err)
     })
   }, [])

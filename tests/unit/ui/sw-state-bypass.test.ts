@@ -16,7 +16,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 type FetchListener = (event: { request: unknown; respondWith: (r: unknown) => void }) => void
 
-function loadSwFetchListener(): FetchListener {
+function loadSwFetchListener(scope = 'https://brew.example/'): FetchListener {
   const src = readFileSync(join(process.cwd(), 'public/sw.js'), 'utf8')
   const listeners: Record<string, FetchListener> = {}
   const sandbox = {
@@ -26,6 +26,7 @@ function loadSwFetchListener(): FetchListener {
       },
       skipWaiting: () => {},
       clients: { claim: () => {} },
+      registration: { scope },
     },
     location: { origin: 'https://brew.example' },
     caches: {
@@ -71,5 +72,39 @@ describe('sw /state bypass', () => {
     const { event, respondWith } = fetchEvent('https://brew.example/recipes/')
     onFetch(event)
     expect(respondWith).toHaveBeenCalled()
+  })
+})
+
+describe('sw /state bypass under a subpath deploy (BASE from registration scope)', () => {
+  const SCOPE = 'https://brew.example/beer-lab-ware/'
+
+  it('does NOT intercept GET <base>/state', () => {
+    const onFetch = loadSwFetchListener(SCOPE)
+    const { event, respondWith } = fetchEvent('https://brew.example/beer-lab-ware/state')
+    onFetch(event)
+    expect(respondWith).not.toHaveBeenCalled()
+  })
+
+  it('does NOT intercept a <base>/state subpath', () => {
+    const onFetch = loadSwFetchListener(SCOPE)
+    const { event, respondWith } = fetchEvent('https://brew.example/beer-lab-ware/state/anything')
+    onFetch(event)
+    expect(respondWith).not.toHaveBeenCalled()
+  })
+
+  it('DOES handle a normal in-scope GET under the subpath', () => {
+    const onFetch = loadSwFetchListener(SCOPE)
+    const { event, respondWith } = fetchEvent('https://brew.example/beer-lab-ware/recipes/')
+    onFetch(event)
+    expect(respondWith).toHaveBeenCalled()
+  })
+
+  it('survives a missing self.registration (falls back to root base)', () => {
+    // loadSwFetchListener always provides registration; simulate absence by
+    // passing an invalid scope so the URL parse throws inside the SW.
+    const onFetch = loadSwFetchListener('not a url')
+    const { event, respondWith } = fetchEvent('https://brew.example/state')
+    onFetch(event)
+    expect(respondWith).not.toHaveBeenCalled()
   })
 })

@@ -40,16 +40,20 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 })
 
+// Next's metadata URLs are NOT auto-prefixed by basePath — prefix explicitly
+// so subpath deploys (BASE_PATH set) resolve the manifest and icons.
+const base = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
+
 export const metadata: Metadata = {
   title: 'Beer-Lab-Ware',
   description: 'Homebrewing recipe calculator tuned to the BrewTools B40 Pro',
-  manifest: '/manifest.webmanifest',
+  manifest: `${base}/manifest.webmanifest`,
   icons: {
     icon: [
-      { url: '/icons/favicon-32.png', sizes: '32x32', type: 'image/png' },
-      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: `${base}/icons/favicon-32.png`, sizes: '32x32', type: 'image/png' },
+      { url: `${base}/icons/icon-192.png`, sizes: '192x192', type: 'image/png' },
     ],
-    apple: '/icons/apple-touch-icon.png',
+    apple: `${base}/icons/apple-touch-icon.png`,
   },
 }
 

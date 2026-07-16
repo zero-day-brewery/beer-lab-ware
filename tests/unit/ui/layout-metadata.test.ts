@@ -11,29 +11,29 @@ const src = readFileSync('src/app/layout.tsx', 'utf8')
 
 describe('layout metadata', () => {
   it('tab icon prefers the small-mark 32px asset, then the full mark at 192', () => {
-    expect(src).toContain("url: '/icons/favicon-32.png', sizes: '32x32'")
-    expect(src).toContain("url: '/icons/icon-192.png', sizes: '192x192'")
-    expect(src).toContain("apple: '/icons/apple-touch-icon.png'")
+    // Icon URLs are template literals carrying the deploy base path
+    // (NEXT_PUBLIC_BASE_PATH, '' for root deploys) — see the basePath support.
+    expect(src).toContain("url: `${base}/icons/favicon-32.png`, sizes: '32x32'")
+    expect(src).toContain("url: `${base}/icons/icon-192.png`, sizes: '192x192'")
+    expect(src).toContain('apple: `${base}/icons/apple-touch-icon.png`')
 
     // Assert order: favicon-32.png must come before icon-192.png
-    const idx32 = src.indexOf("url: '/icons/favicon-32.png'")
-    const idx192 = src.indexOf("url: '/icons/icon-192.png'")
+    const idx32 = src.indexOf('url: `${base}/icons/favicon-32.png`')
+    const idx192 = src.indexOf('url: `${base}/icons/icon-192.png`')
     expect(idx32).toBeGreaterThan(-1)
     expect(idx192).toBeGreaterThan(-1)
     expect(idx32).toBeLessThan(idx192)
 
     // Assert both entries have type: 'image/png'
-    const section32 = src.substring(
-      src.indexOf("url: '/icons/favicon-32.png'"),
-      src.indexOf("url: '/icons/icon-192.png'"),
-    )
+    const section32 = src.substring(idx32, idx192)
     expect(section32).toContain("type: 'image/png'")
 
-    const section192 = src.substring(
-      src.indexOf("url: '/icons/icon-192.png'"),
-      src.indexOf("url: '/icons/icon-192.png'") + 200,
-    )
+    const section192 = src.substring(idx192, idx192 + 200)
     expect(section192).toContain("type: 'image/png'")
+  })
+
+  it('metadata carries the base prefix on the manifest link', () => {
+    expect(src).toContain('manifest: `${base}/manifest.webmanifest`')
   })
 
   it('title carries no emoji — the favicon is the brand now', () => {
