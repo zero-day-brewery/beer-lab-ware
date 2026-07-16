@@ -47,6 +47,22 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
   esbuild, node22 target, all dependencies including `@modelcontextprotocol/sdk`
   bundled). Production deploys now run `node dist/sync-server.mjs` directly — no `tsx`,
   no live-checkout `node_modules` on the serving path.
+- Behavioral unit coverage for `public/sw.js`, the offline engine: install
+  (versioned precache populated, `skipWaiting`), activate (stale cache versions
+  deleted, clients claimed), and every fetch strategy (cache-first
+  `/_next/static/`, navigation fallback chain to `/` then the offline 503,
+  non-GET/cross-origin pass-through) — each asserted at the origin root AND
+  under a subpath deploy, via a shared `node:vm` sandbox harness
+  (`tests/unit/ui/sw-harness.ts`) that injects the precache exactly like the
+  build does.
+- Offline e2e smoke (`e2e/offline.spec.ts`): registers the real service worker
+  against the production build, waits for the precache, cuts the network, and
+  proves the app shell reloads and navigates to `/calculators/` from cache —
+  including the synthesized 503 for uncached requests.
+- Golden-value tests pinning the safety-critical pressure calculators
+  (force-carb, spunding incl. the MAWP cap, line balance, residual CO2) to
+  published chart/table reference values with source citations, so a silent
+  regression in pressure math fails loudly instead of shipping.
 
 ### Changed
 - README now states the real status of multi-device sync: the daemon and client
