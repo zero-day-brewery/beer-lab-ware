@@ -14,6 +14,11 @@ import {
  *  - `spoilage`      stock written off (expired, spilled, dumped).
  *  - `brew-deduct`   consumed by a brew. RESERVED for Phase 2b (auto-deduct);
  *                    defined now so 2b needs no schema/version change.
+ *  - `sync-reconcile` a deterministic compensating entry minted by the sync
+ *                    merge (`sync-client.ts`) when two devices' concurrent
+ *                    deductions union to a negative ledger sum for an item —
+ *                    brings `Σdeltas` back to the non-negative floor so
+ *                    `amount === Σdeltas` holds exactly (see `reprojectAmounts`).
  */
 export const StockReasonSchema = z.enum([
   'opening',
@@ -21,6 +26,7 @@ export const StockReasonSchema = z.enum([
   'manual-adjust',
   'spoilage',
   'brew-deduct',
+  'sync-reconcile',
 ])
 export type StockReason = z.infer<typeof StockReasonSchema>
 

@@ -49,6 +49,7 @@ const REASON_LABELS: Record<StockReason, string> = {
   'manual-adjust': 'Manual adjust',
   spoilage: 'Spoilage',
   'brew-deduct': 'Brew deduct',
+  'sync-reconcile': 'Sync reconcile',
 }
 
 const KIND_LABELS: Record<InventoryKind, string> = {

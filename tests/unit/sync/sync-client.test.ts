@@ -18,6 +18,8 @@ afterEach(async () => {
   await Promise.all(dbs.splice(0).map((d) => d.delete().catch(() => {})))
 })
 
+const noopSnapshot = async () => {}
+
 function lot(over: Partial<YeastLot> & { id: string }): YeastLot {
   return {
     name: 'WLP001',
@@ -48,6 +50,7 @@ describe('syncOnce — two devices converge through one transport', () => {
     const rA = await syncOnce({
       transport,
       backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
       now: '2026-06-01T00:00:00.000Z',
     })
     expect(rA.pulled).toBe(false)
@@ -57,6 +60,7 @@ describe('syncOnce — two devices converge through one transport', () => {
     const rB = await syncOnce({
       transport,
       backup: makeBackupService(dbB),
+      snapshot: noopSnapshot,
       now: '2026-06-01T00:01:00.000Z',
     })
     expect(rB.merged).toBe(true)
@@ -64,7 +68,12 @@ describe('syncOnce — two devices converge through one transport', () => {
     expect(bStrains).toEqual(['A-Strain', 'B-Strain'])
 
     // A syncs again (pulls the union → converges)
-    await syncOnce({ transport, backup: makeBackupService(dbA), now: '2026-06-01T00:02:00.000Z' })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
+      now: '2026-06-01T00:02:00.000Z',
+    })
     const aStrains = (await makeYeastLotsRepo(dbA).list()).map((l) => l.strain).sort()
     expect(aStrains).toEqual(['A-Strain', 'B-Strain'])
   })
@@ -83,9 +92,24 @@ describe('syncOnce — two devices converge through one transport', () => {
       lot({ id, strain: 'California Ale', quantity: 9, updatedAt: '2026-06-05T00:00:00.000Z' }),
     )
 
-    await syncOnce({ transport, backup: makeBackupService(dbA), now: '2026-06-02T00:00:00.000Z' })
-    await syncOnce({ transport, backup: makeBackupService(dbB), now: '2026-06-06T00:00:00.000Z' })
-    await syncOnce({ transport, backup: makeBackupService(dbA), now: '2026-06-07T00:00:00.000Z' })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
+      now: '2026-06-02T00:00:00.000Z',
+    })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbB),
+      snapshot: noopSnapshot,
+      now: '2026-06-06T00:00:00.000Z',
+    })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
+      now: '2026-06-07T00:00:00.000Z',
+    })
 
     // B's later edit (quantity 9) wins on both
     expect((await makeYeastLotsRepo(dbA).get(id))?.quantity).toBe(9)
@@ -117,8 +141,18 @@ describe('syncOnce — two devices converge through one transport', () => {
       at: '2026-06-02T00:00:00.000Z',
       schemaVersion: 1,
     })
-    await syncOnce({ transport, backup: makeBackupService(dbA), now: '2026-06-03T00:00:00.000Z' })
-    await syncOnce({ transport, backup: makeBackupService(dbB), now: '2026-06-03T00:01:00.000Z' })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
+      now: '2026-06-03T00:00:00.000Z',
+    })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbB),
+      snapshot: noopSnapshot,
+      now: '2026-06-03T00:01:00.000Z',
+    })
     const ids = (await dbB.stockTransactions.toArray()).map((t) => t.id).sort()
     expect(ids).toEqual([txA, txB].sort())
   })

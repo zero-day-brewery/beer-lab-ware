@@ -84,6 +84,24 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
   (including its trailing filename marker), which fails the daemon's hash-format check
   and is silently dropped from `SYNC_TOKEN_HASHES`; it now pipes through `cut` to match
   exactly what the daemon computes.
+- Sync client: two devices concurrently deducting the same inventory item (each
+  locally consistent alone) could union to a negative ledger sum on merge. The
+  merge silently clamped the displayed `amount` to 0 without touching the
+  ledger, so `amount !== Σdeltas` — every subsequent push then failed the sync
+  daemon's ledger-invariant check (400) **forever**, with no way to un-wedge.
+  Worse, the merged (already-broken) dump was restored into the local DB
+  *before* the push, and the data doctor's auto-fix explicitly refuses to
+  repair a negative ledger sum — so there was no recovery path. `syncOnce` now
+  (1) reconciles instead of clamping: it appends a deterministic
+  `sync-reconcile` compensating transaction that brings `Σdeltas` back to the
+  non-negative floor, so `amount === Σdeltas` holds exactly, and (2) snapshots
+  the local state (reusing the existing backup rotation) immediately before
+  any merge restore, so a bad merge is always recoverable. The reconciliation
+  id is derived only from the item id and the sorted ids of the transactions
+  it reconciles — never wall-clock or device input — so two devices that
+  independently reconcile the same conflict produce byte-identical
+  transactions that converge to one on the next merge, instead of drifting
+  apart or double-compensating.
 
 ## [0.1.0] — 2026-07-13
 
