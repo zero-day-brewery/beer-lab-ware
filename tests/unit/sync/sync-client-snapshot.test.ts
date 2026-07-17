@@ -155,8 +155,8 @@ describe('syncOnce — snapshot wired to the real runBackup (reuses KEEP_LAST ro
 
     const transport = new InMemorySyncTransport()
     // Seed a remote directly (bypassing syncOnce) so THIS sync merges → restores
-    // → triggers exactly one snapshot.
-    await transport.push(await makeBackupService(db).dump())
+    // → triggers exactly one snapshot. ifMatch: null — the transport starts empty.
+    await transport.push(await makeBackupService(db).dump(), null)
 
     await syncOnce({
       transport,

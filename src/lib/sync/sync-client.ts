@@ -15,11 +15,23 @@
  *      recoverable through the existing restore path.
  *   5. `restore()` the merged dump locally (reuses the tested, Zod-guarded write
  *      path — a merge is a full replace with the union), when remote existed.
- *   6. `push()` the merged dump back as the new canonical.
+ *   6. `push()` the merged dump back as the new canonical, conditioned on the
+ *      etag observed in step 1 (optimistic concurrency — see below).
  *
  * Single-user/multi-device, so this is a pull→merge→push reconcile, not a delta
  * protocol (Phase 2+). No infra is required to run/test it: drive it with an
  * `InMemorySyncTransport` + a real (or fake) `BackupService`/snapshot fn.
+ *
+ * Optimistic concurrency (closing the lost-update race): the daemon's `PUT
+ * /state` requires an `If-Match` precondition (`sync-server.ts`) — if another
+ * device pushed between THIS pass's pull and its own push, the push is
+ * rejected (412) instead of silently clobbering the other device's write. On a
+ * 412, `syncOnce` re-pulls, re-merges (steps 1-5 all run again — including
+ * `sync-reconcile`), and retries the push with the fresh etag, bounded to
+ * `MAX_PUSH_ATTEMPTS` total attempts before throwing a typed
+ * `SyncPushConflictError`. Every retry re-dumps local state too (not just the
+ * remote), for the same TOCTOU reason step 2 does on the first pass — a local
+ * write landing during a retry's network round-trip must never be clobbered.
  *
  * ⚠️ KNOWN LIMITATION (must be resolved before two-way sync goes live): the merge
  * has NO deletion tombstones, so a row deleted on one device is resurrected from
@@ -32,7 +44,7 @@ import { v5 as uuidv5 } from 'uuid'
 import type { StockTransaction } from '@/lib/brewing/types/stock-transaction'
 import type { DumpV8 } from '@/lib/db/backup'
 import { mergeLedger, mergeState } from '@/lib/sync/merge'
-import type { SyncPayload, SyncTransport } from '@/lib/sync/transport'
+import type { SyncPayload, SyncPushResult, SyncTransport } from '@/lib/sync/transport'
 
 type Tables = DumpV8['tables']
 
@@ -217,15 +229,64 @@ export interface SyncResult {
   counts: Record<string, number>
 }
 
-export async function syncOnce({
-  transport,
-  backup,
-  snapshot,
-  now,
-}: SyncClientDeps): Promise<SyncResult> {
+/** Total PUT attempts `syncOnce` makes before giving up on a persistently
+ *  stale precondition (1 initial attempt + up to 2 retries). Each retry
+ *  re-pulls + re-merges against the fresh remote first (see module doc), so a
+ *  retry only recurs when a DIFFERENT writer keeps winning the race — a
+ *  genuinely pathological/contended scenario, not routine operation. */
+const MAX_PUSH_ATTEMPTS = 3
+
+/**
+ * Thrown when `syncOnce` cannot land its push: either the daemon rejected
+ * every attempt with a stale precondition (412, `MAX_PUSH_ATTEMPTS` exhausted
+ * — an unusually contended run of competing writers) or rejected the FIRST
+ * attempt outright for missing a precondition (428 — a client/transport bug,
+ * since `syncOnce` always supplies one; never retried, since retrying an
+ * omitted precondition can't self-correct). Local state is never left corrupt
+ * on this failure: any restore that happened used a properly snapshotted,
+ * already-merged dump, and the only thing that DIDN'T happen is publishing it
+ * as canonical — the next `syncOnce` call (manual retry, or the app's regular
+ * sync cadence) will try again from fresh state.
+ */
+export class SyncPushConflictError extends Error {
+  readonly attempts: number
+  readonly lastStatus: 412 | 428
+  readonly currentEtag: string | null
+
+  constructor(attempts: number, lastStatus: 412 | 428, currentEtag: string | null = null) {
+    super(
+      lastStatus === 412
+        ? `sync push failed after ${attempts} attempt(s): a competing writer keeps winning the precondition race`
+        : 'sync push failed: the server requires an If-Match precondition (428) — client/transport protocol mismatch',
+    )
+    this.name = 'SyncPushConflictError'
+    this.attempts = attempts
+    this.lastStatus = lastStatus
+    this.currentEtag = currentEtag
+  }
+}
+
+interface PullMergeRestorePass {
+  mergedDump: DumpV8
+  etag: string | null
+  pulled: boolean
+  merged: boolean
+}
+
+/** One full pull → dump-local → merge → (snapshot + restore) pass, WITHOUT the
+ *  push. Used for both the initial attempt and every 412 retry — a retry needs
+ *  to see the freshest remote AND the freshest local (a local write landing
+ *  during a retry's network round-trip must never be clobbered, same TOCTOU
+ *  reasoning as the very first pass). */
+async function pullMergeRestore(
+  transport: SyncTransport,
+  backup: SyncBackup,
+  snapshot: () => Promise<unknown>,
+  now: string,
+): Promise<PullMergeRestorePass> {
   // Pull FIRST, then dump local — so any write during the (network) pull is
   // captured by dump() and merged, never clobbered by restoring a stale snapshot.
-  const remote = await transport.pull()
+  const { payload: remote, etag } = await transport.pull()
   const local = await backup.dump()
 
   const mergedTables = remote ? mergeDumpTables(local.tables, remote.tables) : local.tables
@@ -243,13 +304,47 @@ export async function syncOnce({
     await snapshot()
     await backup.restore(mergedDump)
   }
-  await transport.push(mergedDump as SyncPayload)
 
-  return {
-    pulled: remote !== null,
-    pushed: true,
-    merged: remote !== null,
-    lastSyncAt: now,
-    counts: rowCounts(mergedTables),
+  return { mergedDump, etag, pulled: remote !== null, merged: remote !== null }
+}
+
+export async function syncOnce({
+  transport,
+  backup,
+  snapshot,
+  now,
+}: SyncClientDeps): Promise<SyncResult> {
+  let pass = await pullMergeRestore(transport, backup, snapshot, now)
+
+  for (let attempt = 1; ; attempt++) {
+    const result: SyncPushResult = await transport.push(pass.mergedDump as SyncPayload, pass.etag)
+
+    if (result.ok) {
+      return {
+        pulled: pass.pulled,
+        pushed: true,
+        merged: pass.merged,
+        lastSyncAt: now,
+        counts: rowCounts(pass.mergedDump.tables),
+      }
+    }
+
+    // 412: another writer landed between our pull and our push. Re-pull +
+    // re-merge (the full machinery, including sync-reconcile) and retry with
+    // the fresh etag — bounded, so a pathologically contended run still
+    // terminates instead of retrying forever.
+    if (result.status === 412 && attempt < MAX_PUSH_ATTEMPTS) {
+      pass = await pullMergeRestore(transport, backup, snapshot, now)
+      continue
+    }
+
+    // Either retries are exhausted (412) or the server rejected the FIRST
+    // attempt outright for a missing precondition (428, never retried — see
+    // SyncPushConflictError doc).
+    throw new SyncPushConflictError(
+      attempt,
+      result.status,
+      result.status === 412 ? result.currentEtag : null,
+    )
   }
 }

@@ -25,12 +25,43 @@ for it. The daemon won't even start without at least one token hash configured
 The one exception is `GET /health` (see below) — deliberately unauthenticated, and it
 never returns brewery data, so it isn't a hole in the above.
 
+## Optimistic concurrency is MANDATORY on every PUT — ETag / If-Match
+
+`PUT /state` requires an `If-Match` precondition, checked AFTER auth and body
+validation but atomically with the write itself. This closes a lost-update race: two
+devices pulling the same state and pushing concurrently would otherwise have the
+second push silently overwrite the first, with the first device's changes gone from
+canonical until it happened to sync again.
+
+- `GET /state` returns a strong `ETag` — a quoted sha256 hex of the exact stored JSON
+  bytes. When the store is empty, `GET` still returns an `ETag` on its `204`: the
+  well-known sentinel `"empty"`, so a client's very first push goes through the exact
+  same precondition path as every later one (no empty-store special case).
+- `PUT /state` with **no** `If-Match` header → `428 Precondition Required`,
+  `{ "error": "precondition-required" }`. There are zero deployed daemons for this
+  protocol version, so this is a hard requirement from day one — no legacy
+  token-optional-style fallback, the same posture as the mandatory-auth decision above.
+- `PUT /state` with an `If-Match` that does **not** equal the CURRENT etag →
+  `412 Precondition Failed` (never `409` — 412 is the correct HTTP status for a failed
+  precondition), `{ "error": "precondition-failed" }`, and the response's `ETag`
+  header carries the CURRENT etag so the rejected client can log/inspect what won
+  without another `GET`. This covers a stale etag from an earlier `GET`/`PUT`, a
+  content-shaped etag presented against an empty store, and the empty sentinel
+  presented against a non-empty store — all are just "doesn't match current."
+- `PUT /state` with a matching `If-Match` → `200`, and the response's `ETag` header
+  carries the NEW etag for the next write.
+- The precondition check and the write are both inside the daemon's write mutex, so
+  two concurrent PUTs racing from the same base state always resolve to exactly one
+  `200` and one `412` — never both succeeding, never a silent clobber.
+
 ## What's already built + tested (this repo)
 - **`src/lib/node/sync-server.ts`** — the daemon.
   - `GET/PUT /state` — mandatory hashed Bearer auth (`timingSafeEqual`), 204-when-empty,
     envelope + ledger-invariant validation on PUT, atomic write behind a mutex, binds
     127.0.0.1. A rejected (401) request logs one stderr line — timestamp, remote
     address, path — and NEVER the token or any part of the Authorization header.
+  - `PUT /state` also requires optimistic-concurrency `If-Match` (see above) — `428`
+    when absent, `412` when stale, both checked atomically with the write.
   - `GET /health` — **unauthenticated**, `200 { ok, daemonVersion, supportedDumpVersions }`,
     never reads or leaks brewery data. For uptime monitoring (see below).
   - Before each `PUT` overwrites the canonical file, the prior generation is
@@ -83,14 +114,33 @@ the server (or by your CI) from the checked-out source.
    the hash to `sync.env`.
 5. `systemctl enable --now caddy beer-lab-sync`; reboot the host once to prove
    both services come back up and the cert is reused.
-6. Smoke-test both endpoints directly (the app can't connect yet — see STATUS above):
+6. Smoke-test the endpoints directly (the app can't connect yet — see STATUS above).
+   This also exercises the optimistic-concurrency contract (see above) end-to-end:
 
    ```bash
    curl -s https://<your-domain>/health
    # expect: 200 {"ok":true,"daemonVersion":"0.1.0","supportedDumpVersions":[1,2,3,4,5,6,7,8]}
 
    curl -i -H "Authorization: Bearer <your-token>" https://<your-domain>/state
-   # expect: 204 No Content before the first push; 401 without/with a bad token
+   # expect: 204 No Content before the first push (with `etag: "empty"`); 401 without/with a bad token
+
+   # A PUT with no If-Match is rejected outright — no legacy fallback:
+   curl -i -X PUT -H "Authorization: Bearer <your-token>" \
+     -H "Content-Type: application/json" -d '{}' https://<your-domain>/state
+   # expect: 428 Precondition Required {"error":"precondition-required"}
+
+   # The first-ever PUT echoes back the empty-sentinel etag GET just reported:
+   curl -i -X PUT -H "Authorization: Bearer <your-token>" -H 'If-Match: "empty"' \
+     -H "Content-Type: application/json" --data @your-export.json https://<your-domain>/state
+   # expect: 200 {"ok":true}, response ETag header is the new content etag — save it
+
+   # Re-running the SAME PUT with the now-stale "empty" precondition is rejected:
+   curl -i -X PUT -H "Authorization: Bearer <your-token>" -H 'If-Match: "empty"' \
+     -H "Content-Type: application/json" --data @your-export.json https://<your-domain>/state
+   # expect: 412 Precondition Failed {"error":"precondition-failed"}, response ETag is the CURRENT (new) one
+
+   curl -i -H "Authorization: Bearer <your-token>" https://<your-domain>/state
+   # expect: 200 + your export back verbatim, ETag header matches what the successful PUT returned
    ```
 
 ## Token lifecycle

@@ -5,13 +5,47 @@
  * holds the canonical brewery state as a `DumpV8` file and exposes exactly what
  * the in-app {@link HttpSyncTransport} client calls:
  *
- *   GET  /state   → 200 + the stored DumpV8 verbatim, or 204 when none exists yet.
- *   PUT  /state   → validate + persist the client's merged DumpV8 as the new canonical.
+ *   GET  /state   → 200 + the stored DumpV8 verbatim + an ETag header, or 204 (+
+ *                   the well-known empty-sentinel ETag) when none exists yet.
+ *   PUT  /state   → optimistic-concurrency write (see below) — validate + persist
+ *                   the client's merged DumpV8 as the new canonical.
  *   GET  /health  → 200 + { ok, daemonVersion, supportedDumpVersions }. UNAUTHENTICATED —
  *                   for uptime monitoring; never touches or leaks brewery data.
  *
  * The merge is entirely CLIENT-side (`syncOnce`); the daemon is a dumb
  * store-and-return-the-whole-dump slot — NO server-side merge/delta/cursor.
+ *
+ * Optimistic concurrency (ETag / If-Match):
+ *   - `GET /state` returns a STRONG `ETag`: a quoted sha256 hex of the exact
+ *     stored JSON bytes. When the store is empty (204), the ETag header is the
+ *     well-known sentinel `EMPTY_ETAG_SENTINEL` (`src/lib/sync/etag.ts`) rather
+ *     than omitted — this lets `PUT`'s precondition check be ONE uniform
+ *     equality comparison (current vs. presented) with no empty-store special
+ *     case, and lets a client bootstrap its very first push through the exact
+ *     same race-safe path as every subsequent one.
+ *   - `PUT /state` REQUIRES `If-Match: <etag>`. No exceptions, no legacy
+ *     fallback: there are zero deployed daemons for this protocol version, so
+ *     the wire contract is locked down correctly from day one rather than
+ *     tolerating an omitted precondition that would only reopen the
+ *     lost-update race this feature exists to close. A PUT with no `If-Match`
+ *     header is rejected `428 Precondition Required` before the body is even
+ *     read. A PUT whose `If-Match` doesn't equal the CURRENT etag (including a
+ *     content-shaped etag presented against an empty store, or the empty
+ *     sentinel presented against a non-empty store) is rejected
+ *     `412 Precondition Failed` (never `409` — 412 is the correct HTTP
+ *     semantics for a failed precondition) with `{ error: 'precondition-failed' }`
+ *     and the response's `ETag` header set to the CURRENT etag, so a rejected
+ *     client can log/inspect what actually won without another GET. On a match,
+ *     the write proceeds (existing envelope + ledger-invariant validation
+ *     unchanged) and the response carries the NEW `ETag`.
+ *   - The precondition compare AND the write happen inside the SAME mutex
+ *     critical section used for the write itself (see `runExclusive` below) —
+ *     checking "current etag" outside that section would reopen the exact
+ *     lost-update race (two PUTs both read the same stale "current" state,
+ *     both pass their precondition check, the second silently wins) that this
+ *     feature exists to close. Every PUT is therefore fully serialized: of two
+ *     concurrent PUTs racing from the same base state, exactly one gets 200 and
+ *     the other gets 412 — never both succeeding, never a silent clobber.
  *
  * Security (single-user, multi-device):
  *   - A per-device Bearer token is MANDATORY on both `/state` methods (network
@@ -47,6 +81,7 @@ import {
   SUPPORTED_VERSIONS,
 } from '@/lib/node/brewery-store'
 import { createMutex } from '@/lib/node/mutex'
+import { EMPTY_ETAG_SENTINEL } from '@/lib/sync/etag'
 import packageJson from '../../../package.json' with { type: 'json' }
 
 /** The running package's version — the default `GET /health` `daemonVersion`. */
@@ -58,6 +93,28 @@ const DEFAULT_KEEP_GENERATIONS = 10
 /** sha256 hex of a string — used to hash device tokens (never store plaintext). */
 export function sha256Hex(input: string): string {
   return createHash('sha256').update(input, 'utf8').digest('hex')
+}
+
+/** Strong ETag (RFC 7232 §2.3) for the exact bytes `GET /state` returns / `PUT
+ *  /state` just wrote: a quoted sha256 hex of the raw JSON string. Always
+ *  strong (never `W/`-prefixed) — the daemon always serves the exact stored
+ *  bytes, so a strong validator is correct. */
+function etagFor(rawJson: string): string {
+  return `"${sha256Hex(rawJson)}"`
+}
+
+/** The CURRENT ETag of the canonical file at `filePath`: its strong content
+ *  ETag when it exists, or `EMPTY_ETAG_SENTINEL` when nothing has been written
+ *  yet. Used by both `GET /state` and `PUT /state`'s If-Match compare, so both
+ *  routes agree on exactly what "current state" means. */
+async function currentEtagOf(filePath: string): Promise<string> {
+  try {
+    const body = await readFile(filePath, 'utf8')
+    return etagFor(body)
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return EMPTY_ETAG_SENTINEL
+    throw err
+  }
 }
 
 export interface SyncServerOptions {
@@ -184,21 +241,40 @@ export function createSyncHandler(opts: SyncServerOptions) {
     }
 
     if (req.method === 'GET') {
+      let body: string
       try {
-        const body = await readFile(opts.filePath, 'utf8')
-        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
-        res.end(body)
+        body = await readFile(opts.filePath, 'utf8')
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-          res.writeHead(204).end() // first device — nothing canonical yet
+          // First device — nothing canonical yet. The empty-sentinel ETag lets
+          // a client's first PUT go through the same If-Match path as any other.
+          res.writeHead(204, { etag: EMPTY_ETAG_SENTINEL, 'cache-control': 'no-store' })
+          res.end()
           return
         }
         sendJson(res, 500, { error: 'read failed' })
+        return
       }
+      res.writeHead(200, {
+        'content-type': 'application/json',
+        'cache-control': 'no-store',
+        etag: etagFor(body),
+      })
+      res.end(body)
       return
     }
 
     if (req.method === 'PUT') {
+      // Precondition is mandatory — see the file header's "Optimistic
+      // concurrency" note. Checked before even reading the body: a legacy/
+      // broken client gets a fast, cheap rejection.
+      const ifMatchHeader = req.headers['if-match']
+      const ifMatch = (Array.isArray(ifMatchHeader) ? ifMatchHeader[0] : ifMatchHeader)?.trim()
+      if (!ifMatch) {
+        sendJson(res, 428, { error: 'precondition-required' })
+        return
+      }
+
       let raw: string
       try {
         raw = await readBody(req, maxBody)
@@ -222,18 +298,34 @@ export function createSyncHandler(opts: SyncServerOptions) {
         sendJson(res, 400, { error: err instanceof Error ? err.message : 'invalid dump' })
         return
       }
-      // Persist the client's DumpV8 VERBATIM (preserve meta/exportedAt/version),
-      // atomically, serialized so a concurrent GET never reads a torn file. The
-      // prior generation is snapshotted to a `.bak` FIRST (no-op on the very
-      // first PUT or when generations are disabled); this never touches the
-      // atomic temp+rename of the main write itself.
+      // The If-Match compare AND the write happen INSIDE the same mutex
+      // critical section as each other (and as every other PUT) — see the file
+      // header note on why checking the precondition outside this section would
+      // reopen the lost-update race. Persist the client's DumpV8 VERBATIM
+      // (preserve meta/exportedAt/version), atomically; a concurrent GET never
+      // reads a torn file. The prior generation is snapshotted to a `.bak` FIRST
+      // (no-op on the very first PUT or when generations are disabled) — this
+      // never touches the atomic temp+rename of the main write itself.
+      let outcome: { matched: true; etag: string } | { matched: false; etag: string }
       try {
-        await runExclusive(async () => {
+        outcome = await runExclusive(async () => {
+          const current = await currentEtagOf(opts.filePath)
+          if (ifMatch !== current) {
+            return { matched: false as const, etag: current }
+          }
           await rotateGenerations(opts.filePath, keepGenerations)
+          const json = JSON.stringify(parsed, null, 2)
           await atomicWriteJson(opts.filePath, parsed)
+          return { matched: true as const, etag: etagFor(json) }
         })
       } catch {
         sendJson(res, 500, { error: 'write failed' })
+        return
+      }
+
+      res.setHeader('etag', outcome.etag)
+      if (!outcome.matched) {
+        sendJson(res, 412, { error: 'precondition-failed' })
         return
       }
       sendJson(res, 200, { ok: true })

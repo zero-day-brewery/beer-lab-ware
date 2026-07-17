@@ -38,6 +38,23 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
 - Sync daemon: a rejected (401) request now logs one stderr line — timestamp, remote
   address (honors `X-Forwarded-For` behind a reverse proxy), and path — never any part
   of the Authorization header or token.
+- Sync protocol: optimistic concurrency (ETag / If-Match) on `/state`, closing a
+  lost-update race — two devices pulling the same state and pushing concurrently could
+  previously have the second push silently overwrite the first, with the first
+  device's changes gone from canonical until it happened to sync again. `GET /state`
+  now returns a strong `ETag` (sha256 hex of the exact stored bytes; a well-known
+  empty-sentinel on 204-when-empty). `PUT /state` now REQUIRES `If-Match`: a missing
+  precondition is `428 Precondition Required` and a stale one is
+  `412 Precondition Failed` (not `409`) with the current etag on the response, both
+  checked atomically with the write itself so two concurrent PUTs from the same base
+  state always resolve to exactly one winner. There are zero deployed daemons for this
+  protocol version, so this is a hard requirement with no legacy fallback — documented
+  in `src/lib/node/sync-server.ts`'s file header and `docs/deploy/README.md`.
+  `SyncTransport.pull()`/`push()` (both `InMemorySyncTransport` and
+  `HttpSyncTransport`) carry the etag through; `syncOnce` retries a `412` by
+  re-pulling, re-merging (the full merge machinery, including `sync-reconcile`, runs
+  again), and re-pushing with the fresh etag, bounded to 3 total attempts before
+  throwing a typed `SyncPushConflictError`.
 - MCP server: `MCP_READ_ONLY=1` (or `true`) boots the server with the 4 write tools
   (`scale_recipe`, `create_recipe`, `log_reading`, `adjust_inventory`) unregistered
   entirely — absent from `tools/list`, not merely rejected at call time. Read tools are

@@ -11,6 +11,7 @@
  * token-free stderr-style line.
  */
 
+import { createHash } from 'node:crypto'
 import { mkdtemp, readdir, readFile } from 'node:fs/promises'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -18,6 +19,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createSyncServer, sha256Hex } from '@/lib/node/sync-server'
+import { EMPTY_ETAG_SENTINEL } from '@/lib/sync/etag'
 import { fixtureCollections } from '../../fixtures/node/brewery-fixture'
 
 const TOKEN = 'device-token-abc123'
@@ -33,6 +35,8 @@ function validDump() {
 }
 
 const auth = (t = TOKEN) => ({ authorization: `Bearer ${t}`, 'content-type': 'application/json' })
+/** `auth()` plus an `If-Match` precondition header — every PUT needs one now. */
+const authIfMatch = (ifMatch: string, t = TOKEN) => ({ ...auth(t), 'if-match': ifMatch })
 
 describe('sync-server /state', () => {
   let server: Server
@@ -77,7 +81,7 @@ describe('sync-server /state', () => {
     const dump = validDump()
     const put = await fetch(`${base}/state`, {
       method: 'PUT',
-      headers: auth(),
+      headers: authIfMatch(EMPTY_ETAG_SENTINEL),
       body: JSON.stringify(dump),
     })
     expect(put.status).toBe(200)
@@ -91,14 +95,18 @@ describe('sync-server /state', () => {
   })
 
   it('rejects invalid JSON with 400', async () => {
-    const res = await fetch(`${base}/state`, { method: 'PUT', headers: auth(), body: 'not json' })
+    const res = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: authIfMatch(EMPTY_ETAG_SENTINEL),
+      body: 'not json',
+    })
     expect(res.status).toBe(400)
   })
 
   it('rejects an unsupported envelope version with 400', async () => {
     const res = await fetch(`${base}/state`, {
       method: 'PUT',
-      headers: auth(),
+      headers: authIfMatch(EMPTY_ETAG_SENTINEL),
       body: JSON.stringify({ version: 99, tables: {} }),
     })
     expect(res.status).toBe(400)
@@ -109,7 +117,7 @@ describe('sync-server /state', () => {
     dump.tables.inventoryItems[0] = { ...dump.tables.inventoryItems[0], amount: 999 }
     const res = await fetch(`${base}/state`, {
       method: 'PUT',
-      headers: auth(),
+      headers: authIfMatch(EMPTY_ETAG_SENTINEL),
       body: JSON.stringify(dump),
     })
     expect(res.status).toBe(400)
@@ -192,10 +200,15 @@ describe('sync-server PUT /state — generation rotation (SYNC_KEEP_GENERATIONS)
   let base: string
   let dir: string
   let filePath: string
+  // Threads the precondition across sequential PUTs in this describe block —
+  // each call's If-Match must be the etag the PREVIOUS successful PUT returned
+  // (or the empty-sentinel for the very first one).
+  let currentEtag: string
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'sync-server-gen-'))
     filePath = join(dir, 'brewery.json')
+    currentEtag = EMPTY_ETAG_SENTINEL
   })
 
   afterEach(async () => {
@@ -216,10 +229,12 @@ describe('sync-server PUT /state — generation rotation (SYNC_KEEP_GENERATIONS)
   async function put(exportedAt: string): Promise<void> {
     const res = await fetch(`${base}/state`, {
       method: 'PUT',
-      headers: auth(),
+      headers: authIfMatch(currentEtag),
       body: JSON.stringify({ ...validDump(), exportedAt }),
     })
     expect(res.status).toBe(200)
+    currentEtag = res.headers.get('etag') as string
+    expect(currentEtag).toBeTruthy()
   }
 
   async function backupFiles(): Promise<string[]> {
@@ -347,5 +362,181 @@ describe('sync-server /state — 401 auth-failure logging', () => {
     expect(lines).toHaveLength(0)
 
     await new Promise<void>((resolve) => server.close(() => resolve()))
+  })
+})
+
+describe('sync-server /state — ETag / If-Match optimistic concurrency', () => {
+  let server: Server
+  let base: string
+  let filePath: string
+
+  beforeEach(async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'sync-server-etag-'))
+    filePath = join(dir, 'brewery.json')
+    server = createSyncServer({
+      filePath,
+      tokenHashes: new Set([sha256Hex(TOKEN)]),
+      authFailureLog: () => {},
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+    base = `http://127.0.0.1:${port}`
+  })
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  })
+
+  it('GET on an empty store returns 204 with the well-known empty-sentinel ETag, no body', async () => {
+    const res = await fetch(`${base}/state`, { headers: auth() })
+    expect(res.status).toBe(204)
+    expect(res.headers.get('etag')).toBe(EMPTY_ETAG_SENTINEL)
+    expect(await res.text()).toBe('')
+  })
+
+  it('GET after a PUT returns a strong ETag that is exactly sha256(stored bytes), quoted', async () => {
+    const put = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: authIfMatch(EMPTY_ETAG_SENTINEL),
+      body: JSON.stringify(validDump()),
+    })
+    expect(put.status).toBe(200)
+
+    const get = await fetch(`${base}/state`, { headers: auth() })
+    const bodyText = await get.text()
+    // Independently recomputed — not by calling back into the implementation's
+    // own helper — to prove the header is genuinely sha256 of the exact bytes.
+    const independentEtag = `"${createHash('sha256').update(bodyText, 'utf8').digest('hex')}"`
+    expect(get.headers.get('etag')).toBe(independentEtag)
+  })
+
+  it('first-ever PUT is accepted with If-Match: <empty-sentinel> and creates the canonical file', async () => {
+    const res = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: authIfMatch(EMPTY_ETAG_SENTINEL),
+      body: JSON.stringify(validDump()),
+    })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('etag')).toMatch(/^"[0-9a-f]{64}"$/)
+  })
+
+  it('PUT with the correct current If-Match succeeds and returns a NEW ETag', async () => {
+    const first = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: authIfMatch(EMPTY_ETAG_SENTINEL),
+      body: JSON.stringify(validDump()),
+    })
+    const etag1 = first.headers.get('etag') as string
+    expect(etag1).toBeTruthy()
+
+    const second = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: authIfMatch(etag1),
+      body: JSON.stringify({ ...validDump(), exportedAt: '2026-08-01T00:00:00.000Z' }),
+    })
+    expect(second.status).toBe(200)
+    const etag2 = second.headers.get('etag')
+    expect(etag2).toBeTruthy()
+    expect(etag2).not.toBe(etag1)
+
+    const get = await fetch(`${base}/state`, { headers: auth() })
+    expect(get.headers.get('etag')).toBe(etag2)
+    expect((await get.json()).exportedAt).toBe('2026-08-01T00:00:00.000Z')
+  })
+
+  it('PUT with a stale If-Match is rejected 412, surfaces the CURRENT etag, and never touches canonical', async () => {
+    const first = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: authIfMatch(EMPTY_ETAG_SENTINEL),
+      body: JSON.stringify(validDump()),
+    })
+    const etag1 = first.headers.get('etag') as string
+
+    const second = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: authIfMatch(etag1),
+      body: JSON.stringify({ ...validDump(), exportedAt: '2026-08-01T00:00:00.000Z' }),
+    })
+    const etag2 = second.headers.get('etag') as string
+
+    // Device A reuses the now-stale etag1 — simulates A pushing S1a after B
+    // already pushed S1b from the same base (the lost-update repro).
+    const stale = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: authIfMatch(etag1),
+      body: JSON.stringify({ ...validDump(), exportedAt: '2026-09-01T00:00:00.000Z' }),
+    })
+    expect(stale.status).toBe(412)
+    expect(await stale.json()).toEqual({ error: 'precondition-failed' })
+    expect(stale.headers.get('etag')).toBe(etag2)
+
+    const get = await fetch(`${base}/state`, { headers: auth() })
+    expect((await get.json()).exportedAt).toBe('2026-08-01T00:00:00.000Z') // B's write, never clobbered
+  })
+
+  it('PUT with a content-shaped If-Match against an EMPTY store is rejected 412', async () => {
+    const fakeContentEtag = `"${'a'.repeat(64)}"`
+    const res = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: authIfMatch(fakeContentEtag),
+      body: JSON.stringify(validDump()),
+    })
+    expect(res.status).toBe(412)
+    expect(await res.json()).toEqual({ error: 'precondition-failed' })
+    expect(res.headers.get('etag')).toBe(EMPTY_ETAG_SENTINEL)
+  })
+
+  it('PUT with no If-Match header at all is rejected 428 against an empty store', async () => {
+    const res = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: auth(),
+      body: JSON.stringify(validDump()),
+    })
+    expect(res.status).toBe(428)
+    expect(await res.json()).toEqual({ error: 'precondition-required' })
+
+    const get = await fetch(`${base}/state`, { headers: auth() })
+    expect(get.status).toBe(204) // the 428'd write never landed
+  })
+
+  it('PUT with no If-Match header is rejected 428 even against a non-empty store (never overwrites)', async () => {
+    const first = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: authIfMatch(EMPTY_ETAG_SENTINEL),
+      body: JSON.stringify(validDump()),
+    })
+    expect(first.status).toBe(200)
+
+    const res = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: auth(),
+      body: JSON.stringify({ ...validDump(), exportedAt: '2026-08-01T00:00:00.000Z' }),
+    })
+    expect(res.status).toBe(428)
+
+    const get = await fetch(`${base}/state`, { headers: auth() })
+    expect((await get.json()).exportedAt).toBe(validDump().exportedAt) // unchanged
+  })
+
+  it('two concurrent PUTs from the same base state: exactly one wins (200), the other 412s — the lost-update repro, fixed', async () => {
+    const [resA, resB] = await Promise.all([
+      fetch(`${base}/state`, {
+        method: 'PUT',
+        headers: authIfMatch(EMPTY_ETAG_SENTINEL),
+        body: JSON.stringify({ ...validDump(), exportedAt: '2026-03-01T00:00:00.000Z' }),
+      }),
+      fetch(`${base}/state`, {
+        method: 'PUT',
+        headers: authIfMatch(EMPTY_ETAG_SENTINEL),
+        body: JSON.stringify({ ...validDump(), exportedAt: '2026-03-02T00:00:00.000Z' }),
+      }),
+    ])
+    const statuses = [resA.status, resB.status].sort()
+    expect(statuses).toEqual([200, 412])
+
+    // Canonical reflects exactly the winner — never silently overwritten, never lost.
+    const get = await fetch(`${base}/state`, { headers: auth() })
+    const body = await get.json()
+    expect(['2026-03-01T00:00:00.000Z', '2026-03-02T00:00:00.000Z']).toContain(body.exportedAt)
   })
 })
