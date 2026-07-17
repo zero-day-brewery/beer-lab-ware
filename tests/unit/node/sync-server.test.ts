@@ -18,7 +18,7 @@ import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createSyncServer, sha256Hex } from '@/lib/node/sync-server'
+import { createSyncServer, parseAllowedOrigins, sha256Hex } from '@/lib/node/sync-server'
 import { EMPTY_ETAG_SENTINEL } from '@/lib/sync/etag'
 import { fixtureCollections } from '../../fixtures/node/brewery-fixture'
 
@@ -362,6 +362,165 @@ describe('sync-server /state — 401 auth-failure logging', () => {
     expect(lines).toHaveLength(0)
 
     await new Promise<void>((resolve) => server.close(() => resolve()))
+  })
+})
+
+describe('sync-server — opt-in CORS (SYNC_ALLOWED_ORIGINS)', () => {
+  const APP_ORIGIN = 'https://app.example.com'
+  const EVIL_ORIGIN = 'https://evil.example.com'
+  let server: Server
+  let base: string
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  })
+
+  async function startServer(allowedOrigins?: ReadonlySet<string>): Promise<void> {
+    const dir = await mkdtemp(join(tmpdir(), 'sync-server-cors-'))
+    server = createSyncServer({
+      filePath: join(dir, 'brewery.json'),
+      tokenHashes: new Set([sha256Hex(TOKEN)]),
+      authFailureLog: () => {},
+      ...(allowedOrigins ? { allowedOrigins } : {}),
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+    base = `http://127.0.0.1:${port}`
+  }
+
+  it('DEFAULT (no allowlist): no CORS headers on any response, even with an Origin header', async () => {
+    await startServer()
+    for (const path of ['/state', '/health']) {
+      const res = await fetch(`${base}${path}`, { headers: { ...auth(), origin: APP_ORIGIN } })
+      expect(res.headers.get('access-control-allow-origin')).toBeNull()
+      expect(res.headers.get('access-control-expose-headers')).toBeNull()
+      expect(res.headers.get('vary')).toBeNull()
+    }
+    // Preflight behaves exactly as before the feature existed: OPTIONS /state
+    // hits the auth gate (401 tokenless), never a CORS 204.
+    const preflight = await fetch(`${base}/state`, {
+      method: 'OPTIONS',
+      headers: { origin: APP_ORIGIN, 'access-control-request-method': 'PUT' },
+    })
+    expect(preflight.status).toBe(401)
+    expect(preflight.headers.get('access-control-allow-origin')).toBeNull()
+  })
+
+  it('matching Origin: echoed back (never *), Vary: Origin, ETag exposed', async () => {
+    await startServer(new Set([APP_ORIGIN]))
+    const res = await fetch(`${base}/state`, { headers: { ...auth(), origin: APP_ORIGIN } })
+    expect(res.status).toBe(204)
+    expect(res.headers.get('access-control-allow-origin')).toBe(APP_ORIGIN)
+    expect(res.headers.get('vary')).toMatch(/origin/i)
+    expect(res.headers.get('access-control-expose-headers')).toMatch(/etag/i)
+    expect(res.headers.get('etag')).toBe(EMPTY_ETAG_SENTINEL) // the exposed header is actually there
+  })
+
+  it('non-matching Origin: gets NO CORS headers at all (allowlist is exact, no wildcard)', async () => {
+    await startServer(new Set([APP_ORIGIN]))
+    const res = await fetch(`${base}/state`, { headers: { ...auth(), origin: EVIL_ORIGIN } })
+    expect(res.status).toBe(204) // same-origin/no-CORS callers unaffected…
+    expect(res.headers.get('access-control-allow-origin')).toBeNull() // …but the browser boundary stays shut
+    expect(res.headers.get('access-control-expose-headers')).toBeNull()
+  })
+
+  it('preflight (OPTIONS) with a matching Origin: tokenless 204, methods/headers/max-age, never any data', async () => {
+    await startServer(new Set([APP_ORIGIN]))
+    // First, land real data so a leak would be detectable.
+    const put = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: authIfMatch(EMPTY_ETAG_SENTINEL),
+      body: JSON.stringify(validDump()),
+    })
+    expect(put.status).toBe(200)
+
+    const res = await fetch(`${base}/state`, {
+      method: 'OPTIONS',
+      headers: { origin: APP_ORIGIN, 'access-control-request-method': 'PUT' }, // NO Authorization
+    })
+    expect(res.status).toBe(204)
+    expect(res.headers.get('access-control-allow-origin')).toBe(APP_ORIGIN)
+    expect(res.headers.get('access-control-allow-methods')).toBe('GET,PUT,OPTIONS')
+    expect(res.headers.get('access-control-allow-headers')).toBe(
+      'Authorization,Content-Type,If-Match',
+    )
+    expect(Number(res.headers.get('access-control-max-age'))).toBeGreaterThan(0)
+    expect(await res.text()).toBe('') // never a body — preflight can't leak state
+  })
+
+  it('preflight with a NON-matching Origin: 204 but zero CORS headers (browser blocks it)', async () => {
+    await startServer(new Set([APP_ORIGIN]))
+    const res = await fetch(`${base}/state`, {
+      method: 'OPTIONS',
+      headers: { origin: EVIL_ORIGIN, 'access-control-request-method': 'PUT' },
+    })
+    expect(res.status).toBe(204)
+    expect(res.headers.get('access-control-allow-origin')).toBeNull()
+    expect(res.headers.get('access-control-allow-methods')).toBeNull()
+    expect(await res.text()).toBe('')
+  })
+
+  it('ETag stays exposed on PUT responses too — success AND 412 (the client reads both)', async () => {
+    await startServer(new Set([APP_ORIGIN]))
+    const okPut = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: { ...authIfMatch(EMPTY_ETAG_SENTINEL), origin: APP_ORIGIN },
+      body: JSON.stringify(validDump()),
+    })
+    expect(okPut.status).toBe(200)
+    expect(okPut.headers.get('access-control-expose-headers')).toMatch(/etag/i)
+    expect(okPut.headers.get('etag')).toMatch(/^"[0-9a-f]{64}"$/)
+
+    const stale = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: { ...authIfMatch(EMPTY_ETAG_SENTINEL), origin: APP_ORIGIN },
+      body: JSON.stringify(validDump()),
+    })
+    expect(stale.status).toBe(412)
+    expect(stale.headers.get('access-control-allow-origin')).toBe(APP_ORIGIN)
+    expect(stale.headers.get('access-control-expose-headers')).toMatch(/etag/i)
+  })
+
+  it('401 responses carry CORS headers for a matching origin (the app must be able to READ the 401)', async () => {
+    await startServer(new Set([APP_ORIGIN]))
+    const res = await fetch(`${base}/state`, { headers: { ...auth(OTHER), origin: APP_ORIGIN } })
+    expect(res.status).toBe(401)
+    expect(res.headers.get('access-control-allow-origin')).toBe(APP_ORIGIN)
+  })
+
+  it('auth is NOT weakened: a matching Origin still 401s without a valid token on GET and PUT', async () => {
+    await startServer(new Set([APP_ORIGIN]))
+    expect((await fetch(`${base}/state`, { headers: { origin: APP_ORIGIN } })).status).toBe(401)
+    expect(
+      (
+        await fetch(`${base}/state`, {
+          method: 'PUT',
+          headers: { origin: APP_ORIGIN, 'if-match': EMPTY_ETAG_SENTINEL },
+          body: '{}',
+        })
+      ).status,
+    ).toBe(401)
+  })
+})
+
+describe('parseAllowedOrigins (SYNC_ALLOWED_ORIGINS)', () => {
+  it('unset/empty → undefined (CORS fully disabled)', () => {
+    expect(parseAllowedOrigins(undefined)).toBeUndefined()
+    expect(parseAllowedOrigins('')).toBeUndefined()
+    expect(parseAllowedOrigins('  ,  ')).toBeUndefined()
+  })
+
+  it('parses a comma-separated list, trimming whitespace and trailing slashes', () => {
+    expect(parseAllowedOrigins(' https://app.example.com/ , http://localhost:3030 ')).toEqual(
+      new Set(['https://app.example.com', 'http://localhost:3030']),
+    )
+  })
+
+  it('refuses wildcards and non-origin entries loudly (fail at startup, not silently never-match)', () => {
+    expect(() => parseAllowedOrigins('*')).toThrow(/wildcard/i)
+    expect(() => parseAllowedOrigins('https://*.example.com')).toThrow(/wildcard/i)
+    expect(() => parseAllowedOrigins('not an origin')).toThrow(/not a valid origin/i)
+    expect(() => parseAllowedOrigins('https://example.com/path')).toThrow(/bare origin/i)
   })
 })
 

@@ -244,3 +244,28 @@ describe('HttpSyncTransport — ETag/If-Match header translation (fake fetch, no
     await expect(t.push(payload(), null)).rejects.toThrow(/500/)
   })
 })
+
+describe('HttpSyncTransport — default fetch binding (browser Illegal-invocation regression)', () => {
+  // window.fetch is this-sensitive: calling it with `this` set to anything
+  // other than undefined/globalThis throws `TypeError: Illegal invocation` in
+  // real browsers. Storing the global fetch on an instance property and
+  // calling `this.fetchImpl(...)` did exactly that — Node's fetch tolerates
+  // it, so only real-browser use failed. This suite installs an equally
+  // this-sensitive global fetch to lock the fix (an arrow wrapper) in place.
+  it('calls the global fetch unbound (never with the transport as `this`)', async () => {
+    const realFetch = globalThis.fetch
+    function thisSensitiveFetch(this: unknown): Promise<Response> {
+      if (this !== undefined && this !== globalThis) {
+        throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation")
+      }
+      return Promise.resolve(new Response(null, { status: 204, headers: { etag: '"empty"' } }))
+    }
+    globalThis.fetch = thisSensitiveFetch as unknown as typeof fetch
+    try {
+      const t = new HttpSyncTransport({ baseUrl: 'https://example.test', token: 'tok' })
+      await expect(t.pull()).resolves.toEqual({ payload: null, etag: null })
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+})

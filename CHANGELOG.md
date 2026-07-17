@@ -20,6 +20,46 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **In-app sync connection UI — multi-device sync is now end-to-end usable.** This
+  closes the gap where the daemon + client sync library shipped fully tested but no
+  UI could reach them (README used to say "the in-app connection UI is still on the
+  roadmap" — it exists now). **Settings → Sync**: server URL (https required; http
+  only for localhost, with the reason shown inline) + per-device token
+  (password-type field), **Test connection** (`GET /health` → daemon version +
+  dump-version compatibility vs the app's own `DUMP_VERSION`, with an explicit
+  "server accepts up to vN, this app writes vM — update the server" mismatch
+  message), and **Sync now** with progress + a human-readable outcome toast (typed
+  failures — push-conflict after bounded retries, 401 auth, network, version
+  mismatch — each get their own message; token material never appears in any toast,
+  log, or stored outcome, with a defense-in-depth scrub on top). Both values live in
+  the DEVICE-LOCAL `appMeta` store: they are never written into a backup dump and
+  never enter the sync payload (frozen by `tests/unit/node/sync-secret-exclusion.test.ts`,
+  which now also proves it against a real dump + a real pushed payload).
+- Sync modes (`syncOnce({ mode })`): `two-way` (default — pull → merge →
+  snapshot+restore → push, unchanged), `pull-only` (pull + merge + snapshot +
+  restore, NEVER pushes — including no first-push seeding of an empty store;
+  "phone follows"), and `push-only` (publish local state as canonical with full
+  If-Match handling incl. the empty-store bootstrap and 412-retry via the
+  rejection's surfaced etag; never merges or restores remote data down; "desktop is
+  canonical"). The Settings card defaults to two-way; the one-way modes sit behind
+  an Advanced disclosure with one-line explanations.
+- Sync daemon: **opt-in CORS** via `SYNC_ALLOWED_ORIGINS` (comma-separated EXACT
+  origins — wildcards refuse to start, deliberately; see docs/deploy/README.md).
+  Needed only when the app is served from a different origin than the daemon (e.g.
+  a hosted PWA + self-hosted daemon). When set: matching `Origin` is echoed (never
+  `*`) with `Vary: Origin` and `Access-Control-Expose-Headers: ETag` (the client's
+  optimistic-concurrency loop must read the ETag cross-origin); non-matching
+  origins get no CORS headers; `OPTIONS` preflight answers a tokenless 204
+  (`GET,PUT,OPTIONS`; `Authorization,Content-Type,If-Match`; 24 h max-age) and
+  never touches brewery data; auth on `/state` is not relaxed in any way. Unset
+  (default): zero CORS headers — byte-identical behavior to before, which is what
+  the same-origin Caddy reference deploy wants.
+- Diagnostics → Multi-device sync is now live state instead of a static
+  placeholder: configured server, reachability (`GET /health`), dump-version
+  compatibility, an auth check (a HEAD-less probe — `GET /state` with the response
+  body cancelled after the status, so a status row never downloads the whole
+  canonical state), and the last sync attempt's timestamp + outcome (recorded in
+  `appMeta` on every attempt, success or failure).
 - Deletion tombstones for the sync merge (`rowTombstones`, Dexie schema v11,
   `DumpV9`): every repo delete path (`db/repos/*.ts`) now writes a `{ id, table,
   deletedAt }` tombstone in the SAME Dexie transaction as the delete — a
@@ -37,8 +77,8 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
   still needed to suppress a device that hasn't synced the deletion yet). This
   closes the two-way-sync gate documented in `sync-client.ts`'s file header —
   the merge no longer resurrects a row deleted on one device from another
-  device's stale, pre-delete copy; two-way sync itself is still pending
-  in-app connection UI (see README). A still-live inventory item whose ENTIRE
+  device's stale, pre-delete copy; the in-app connection UI shipped in this
+  same release (see above). A still-live inventory item whose ENTIRE
   ledger history was cascade-tombstoned away by another device's delete (it
   survived via edit-after-delete) reconciles instead of wedging: `amount ===
   Σdeltas` is restarted from a reconciled "opening" that preserves the item's
@@ -127,10 +167,12 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
   (older dumps import with an empty tombstone set). Self-hosters: upgrade the
   sync daemon before or together with the app — `GET /health`'s
   `supportedDumpVersions` now advertises `[1..9]`.
-- README now states the real status of multi-device sync: the daemon and client
-  library ship and are tested, the in-app connection UI is on the roadmap. The
-  deploy runbook smoke-tests with `curl` instead of an app step that didn't
-  exist, and carries a STATUS callout.
+- README states the real status of multi-device sync — now "end-to-end usable"
+  with the in-app connection UI shipped (see Added above). The deploy runbook's
+  STATUS callout and bring-up step 6 describe the Settings → Sync flow (the
+  `curl` smoke-tests remain as an optional pre-check), and a new "Cross-origin
+  apps (`SYNC_ALLOWED_ORIGINS`)" section + `sync.env.example` entry document the
+  opt-in CORS story, including why the same-origin Caddy deploy needs none.
 - `docs/deploy/`: `beer-lab-sync.service` now runs the pre-built `dist/sync-server.mjs`
   bundle instead of `npx tsx`; the `Caddyfile` adds baseline security headers
   (`X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, a `frame-ancestors`

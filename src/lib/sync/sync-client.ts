@@ -47,8 +47,8 @@
  * "before" a delete by wall-clock-but-after in real time could still lose to
  * the tombstone (or vice versa). Tombstones GC after `TOMBSTONE_RETENTION_MS`
  * once no input dump still references the row they suppress (bounded growth
- * — see `mergeDumpTables`). This closes the two-way-sync gate: two-way sync
- * itself is still pending in-app connection UI (see README).
+ * — see `mergeDumpTables`). This closed the two-way-sync gate; the in-app
+ * connection UI (Settings → Sync) now drives this module in production.
  *
  * ⚠️ Known limitation (cascade-tombstone visibility): a device's cascade
  * delete (e.g. deleting an inventory item — see `db/repos/inventory.ts` /
@@ -363,6 +363,21 @@ export interface SyncBackup {
   restore(d: DumpV9): Promise<void>
 }
 
+/**
+ * Sync direction. `'two-way'` is the default and the recommended mode — with
+ * tombstones + ETag preconditions + deterministic reconciliation it is safe
+ * against deletes, concurrent edits, and competing writers. The one-way modes
+ * exist for deliberate topologies:
+ *   - `'pull-only'` — "phone follows": pull + merge + snapshot + restore, but
+ *     NEVER push — including no first-push seeding of an empty store. This
+ *     device consumes canonical; it never publishes.
+ *   - `'push-only'` — "desktop is canonical": publish local state as the new
+ *     canonical (correct If-Match handling incl. the empty-store bootstrap),
+ *     but NEVER merge or restore remote data down. Remote-only changes are
+ *     intentionally replaced.
+ */
+export type SyncMode = 'two-way' | 'pull-only' | 'push-only'
+
 export interface SyncClientDeps {
   transport: SyncTransport
   backup: SyncBackup
@@ -370,7 +385,8 @@ export interface SyncClientDeps {
    * Pre-restore safety snapshot. Called immediately BEFORE `backup.restore()`
    * overwrites the local DB with the merged dump — a merge restore is a full
    * replace, so without a pre-image a bad merge has no recovery path. Never
-   * called when no restore will happen (a first/solo sync, `remote === null`).
+   * called when no restore will happen (a first/solo sync, `remote === null`,
+   * or `mode: 'push-only'`, which never restores at all).
    * In production wire this to `runBackup` (`src/lib/storage/backup-run.ts`),
    * which already rotates via `KEEP_LAST` — this hook only decides WHEN to
    * snapshot, it intentionally does not reimplement storage/rotation.
@@ -378,6 +394,8 @@ export interface SyncClientDeps {
   snapshot: () => Promise<unknown>
   /** ISO timestamp for this pass (injected for determinism). */
   now: string
+  /** Sync direction — defaults to `'two-way'` (see {@link SyncMode}). */
+  mode?: SyncMode
 }
 
 export interface SyncResult {
@@ -473,13 +491,75 @@ async function pullMergeRestore(
   return { mergedDump, etag, pulled: remote !== null, merged: remote !== null }
 }
 
+/**
+ * `'push-only'` pass: publish local state as the new canonical without ever
+ * merging or restoring remote data down. The initial `pull()` exists ONLY to
+ * observe the current etag for the If-Match precondition (the daemon has no
+ * HEAD/etag-only endpoint; the pulled payload is deliberately discarded). A
+ * 412 retry does NOT re-pull — the rejection itself surfaces the CURRENT etag
+ * (`currentEtag`, mirroring the daemon's 412 `ETag` header) — but it DOES
+ * re-dump local state, for the same TOCTOU reason every other retry path here
+ * re-dumps: a local write landing during the network round-trip must be
+ * included, never clobbered by retrying a stale dump.
+ */
+async function pushOnly(
+  transport: SyncTransport,
+  backup: SyncBackup,
+  now: string,
+): Promise<SyncResult> {
+  let { etag } = await transport.pull()
+
+  for (let attempt = 1; ; attempt++) {
+    const local = await backup.dump()
+    const result: SyncPushResult = await transport.push(local as SyncPayload, etag)
+
+    if (result.ok) {
+      return {
+        pulled: false,
+        pushed: true,
+        merged: false,
+        lastSyncAt: now,
+        counts: rowCounts(local.tables),
+      }
+    }
+
+    if (result.status === 412 && attempt < MAX_PUSH_ATTEMPTS) {
+      etag = result.currentEtag // what actually won — retry against it
+      continue
+    }
+
+    throw new SyncPushConflictError(
+      attempt,
+      result.status,
+      result.status === 412 ? result.currentEtag : null,
+    )
+  }
+}
+
 export async function syncOnce({
   transport,
   backup,
   snapshot,
   now,
+  mode = 'two-way',
 }: SyncClientDeps): Promise<SyncResult> {
+  if (mode === 'push-only') return pushOnly(transport, backup, now)
+
   let pass = await pullMergeRestore(transport, backup, snapshot, now)
+
+  if (mode === 'pull-only') {
+    // Everything that should happen already has (pull + merge + snapshot +
+    // restore inside pullMergeRestore) — this device NEVER publishes, not even
+    // to seed an empty store (a first-push from a follower would silently
+    // promote it to author-of-canonical).
+    return {
+      pulled: pass.pulled,
+      pushed: false,
+      merged: pass.merged,
+      lastSyncAt: now,
+      counts: rowCounts(pass.mergedDump.tables),
+    }
+  }
 
   for (let attempt = 1; ; attempt++) {
     const result: SyncPushResult = await transport.push(pass.mergedDump as SyncPayload, pass.etag)

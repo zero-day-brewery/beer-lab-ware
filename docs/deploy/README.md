@@ -4,10 +4,12 @@ The **personal back-end** for Beer-Lab-Ware: a tiny always-on service that holds
 canonical brewery state so your devices sync. The **front-end stays the lightweight,
 downloadable brewery assistant** — this back-end is the "step further" for personal use.
 
-> **STATUS:** the daemon and the client sync library are built and tested, but the app
-> does not yet expose a connection UI — you cannot point the installed PWA at this
-> server yet. This runbook stands up the infrastructure ahead of that release; the
-> in-app wiring is on the roadmap and will be called out in the changelog when it ships.
+> **STATUS:** end-to-end usable. The app connects to this daemon from **Settings →
+> Sync** — enter the server URL and a per-device token, **Test connection**, then
+> **Sync now** (two-way by default; pull-only / push-only under Advanced). The
+> **Diagnostics** page shows live reachability, dump-version compatibility, and an
+> auth check against this daemon. If the app is served from a DIFFERENT origin than
+> the daemon, see "Cross-origin apps (SYNC_ALLOWED_ORIGINS)" below.
 
 > These are TEMPLATES. Swap in your own domain, server IP, storage paths, and users
 > before deploying.
@@ -79,7 +81,7 @@ canonical until it happened to sync again.
 |---|---|---|
 | `Caddyfile` | `/etc/caddy/Caddyfile` | Serve `out/` + reverse-proxy `/state` and `/health`, plus baseline security headers |
 | `beer-lab-sync.service` | `/etc/systemd/system/` | Run the pre-built daemon bundle (`enable --now`) |
-| `sync.env.example` | `/etc/beer-lab-ware/sync.env` (0600) | `BREWERY_FILE`, `SYNC_TOKEN_HASHES`, `SYNC_PORT`, `SYNC_KEEP_GENERATIONS` |
+| `sync.env.example` | `/etc/beer-lab-ware/sync.env` (0600) | `BREWERY_FILE`, `SYNC_TOKEN_HASHES`, `SYNC_PORT`, `SYNC_KEEP_GENERATIONS`, `SYNC_ALLOWED_ORIGINS` |
 
 ## Building the daemon
 
@@ -115,8 +117,11 @@ the server (or by your CI) from the checked-out source.
    the hash to `sync.env`.
 5. `systemctl enable --now caddy beer-lab-sync`; reboot the host once to prove
    both services come back up and the cert is reused.
-6. Smoke-test the endpoints directly (the app can't connect yet — see STATUS above).
-   This also exercises the optimistic-concurrency contract (see above) end-to-end:
+6. Connect the app: **Settings → Sync** → server URL (`https://<your-domain>`) +
+   the device's plaintext token → **Test connection** (green = reachable +
+   dump-version compatible) → **Sync now**. Optionally smoke-test the endpoints
+   directly with curl first — this also exercises the optimistic-concurrency
+   contract (see above) end-to-end:
 
    ```bash
    curl -s https://<your-domain>/health
@@ -187,6 +192,49 @@ lives only in the device's local storage; it is never a synced/backed-up field (
 **Revoke a device immediately** (lost/compromised device, no replacement token needed
 yet): delete its hash from `SYNC_TOKEN_HASHES`, restart the daemon. No grace period —
 the very next request with that token 401s.
+
+## Cross-origin apps (`SYNC_ALLOWED_ORIGINS`) — opt-in CORS
+
+**The reference deploy in this folder does not need this.** With the Caddyfile here,
+the app (`out/`) and the daemon (`/state`, `/health`) are served from the SAME origin,
+so the browser never makes a cross-origin request and no CORS headers are needed —
+and by default the daemon emits none, exactly as before this option existed.
+
+You need it exactly when the **app is served from a different origin than the
+daemon** — e.g. an installed PWA from a hosted/demo instance (GitHub Pages, another
+domain) pointed at your self-hosted daemon. Without it the browser blocks those
+requests before they reach auth, and Settings → Sync reports the server unreachable.
+
+Set `SYNC_ALLOWED_ORIGINS` in `sync.env` to a comma-separated list of **exact**
+origins (scheme://host[:port] — no paths, no trailing slash):
+
+```bash
+SYNC_ALLOWED_ORIGINS=https://app.example.com,https://your-name.github.io
+```
+
+Behavior when set:
+
+- A request whose `Origin` exactly matches an allowlisted entry gets
+  `Access-Control-Allow-Origin: <that origin>` (echoed, never `*`), `Vary: Origin`,
+  and `Access-Control-Expose-Headers: ETag` — the client's optimistic-concurrency
+  loop needs to READ the `ETag` header cross-origin.
+- A non-matching `Origin` gets **no CORS headers at all** — the browser refuses the
+  response to that page. (Non-browser clients like curl are unaffected either way;
+  auth is what actually gates data.)
+- `OPTIONS` preflight → `204` **without auth** (browsers send preflights without
+  credentials by design), advertising `GET,PUT,OPTIONS`, the headers
+  `Authorization,Content-Type,If-Match`, and a 24 h `Access-Control-Max-Age`. A
+  preflight never reads or returns brewery data.
+- **Auth is never relaxed:** an allowlisted origin still gets `401` on `/state`
+  without a valid Bearer token. CORS only opens the browser's origin boundary; the
+  token stays the gate.
+
+**No wildcard support, deliberately.** `SYNC_ALLOWED_ORIGINS=*` (or any `*` entry)
+refuses to start. This daemon holds one person's full brewery state behind a Bearer
+token; reflecting arbitrary origins would tell every website's JavaScript "you may
+read this server's responses", reducing the browser's origin boundary — the defense
+that still holds if a token ever leaks into a page context — to a no-op. List the
+one or two exact origins you actually serve the app from.
 
 ## Generation backups (`SYNC_KEEP_GENERATIONS`)
 

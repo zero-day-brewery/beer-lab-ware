@@ -168,4 +168,40 @@ describe('syncMetaRepo', () => {
     await repo.setLastSyncAt('2026-06-01T00:00:00.000Z')
     expect(await repo.lastSyncAt()).toBe('2026-06-01T00:00:00.000Z')
   })
+
+  it('round-trips the connection config (URL, token, mode) and clears on empty string', async () => {
+    const repo = makeSyncMetaRepo(freshDb())
+    expect(await repo.serverUrl()).toBeNull()
+    expect(await repo.token()).toBeNull()
+    expect(await repo.mode()).toBe('two-way') // default
+
+    await repo.setServerUrl('https://brewery.example.com')
+    await repo.setToken('  tok-abc  ') // trimmed
+    await repo.setMode('pull-only')
+    expect(await repo.serverUrl()).toBe('https://brewery.example.com')
+    expect(await repo.token()).toBe('tok-abc')
+    expect(await repo.mode()).toBe('pull-only')
+
+    await repo.setServerUrl('')
+    await repo.setToken('')
+    expect(await repo.serverUrl()).toBeNull()
+    expect(await repo.token()).toBeNull()
+  })
+
+  it('records the last sync outcome and treats a corrupt record as absent', async () => {
+    const database = freshDb()
+    const repo = makeSyncMetaRepo(database)
+    expect(await repo.lastOutcome()).toBeNull()
+    const outcome = {
+      at: '2026-06-01T00:00:00.000Z',
+      mode: 'two-way' as const,
+      ok: true,
+      message: 'Sync complete — pulled + merged + pushed',
+    }
+    await repo.setLastOutcome(outcome)
+    expect(await repo.lastOutcome()).toEqual(outcome)
+
+    await database.appMeta.put({ key: 'sync:lastOutcome', value: { garbage: true } })
+    expect(await repo.lastOutcome()).toBeNull()
+  })
 })

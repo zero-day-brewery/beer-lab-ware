@@ -58,7 +58,7 @@ The AI companion is opt-in. Bring your own API key — Anthropic or any OpenAI-c
 ## Sync tiers
 
 - **Local-only (default, for everyone):** your data lives in the browser's local database. No setup required.
-- **Multi-device sync (self-hosted, in progress):** the sync daemon and the client sync library ship in this repo today and are fully tested — see [`docs/deploy/`](./docs/deploy/README.md) for the templates and runbook if you want to stand the service up ahead of time. **The in-app connection UI is still on the roadmap**, so the app can't be pointed at a sync server yet; sync becomes end-to-end usable when that lands (tracked in the changelog).
+- **Multi-device sync (self-hosted):** end-to-end usable. Stand up the sync daemon on a server you control ([`docs/deploy/`](./docs/deploy/README.md) has the templates and runbook), then connect the app in **Settings → Sync**: enter the server URL (https required; http allowed only for localhost) and your per-device token, hit **Test connection**, and **Sync now**. The default mode is safe two-way sync (pull → merge → push, with deletion tombstones, deterministic conflict reconciliation, and ETag optimistic concurrency); an Advanced disclosure offers one-way modes — *pull only* ("phone follows the server") and *push only* ("this desktop is canonical"). **Diagnostics** shows live sync status: reachability, dump-version compatibility, token check, and the last sync outcome. The URL and token are stored only on the device — never in backups, never in the synced data itself.
 
 Local-first is permanent: any sync or hosted tier will always be optional, and the app will always work fully with no account and no server.
 

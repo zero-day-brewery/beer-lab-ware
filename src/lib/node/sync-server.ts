@@ -134,6 +134,26 @@ export interface SyncServerOptions {
    * for tests.
    */
   authFailureLog?: (line: string) => void
+  /**
+   * Opt-in CORS allowlist (env: `SYNC_ALLOWED_ORIGINS`) — EXACT origins only,
+   * e.g. `https://app.example.com`. Needed exactly when the installed PWA is
+   * served from a DIFFERENT origin than this daemon (e.g. a hosted demo
+   * pointing at a self-hosted daemon); the reference same-origin Caddy deploy
+   * never needs it. Unset (default) → not a single CORS header is emitted —
+   * bitwise-identical behavior to before this option existed.
+   *
+   * NO wildcard support, deliberately: this daemon fronts one person's
+   * canonical brewery state behind a Bearer token. `*` (or reflecting any
+   * Origin) would tell every website's JS "you may read responses from this
+   * server", making the browser's origin boundary — the one defense that
+   * still holds if a token ever leaks into a page context — a no-op. An
+   * exact allowlist keeps the blast radius to origins the operator explicitly
+   * trusts. Auth is NEVER relaxed by CORS: a matching origin still 401s
+   * without a valid token; the only tokenless CORS path is the OPTIONS
+   * preflight, which browsers send without credentials by design and which
+   * never touches or returns brewery data.
+   */
+  allowedOrigins?: ReadonlySet<string>
 }
 
 const DEFAULT_MAX_BODY = 64 * 1024 * 1024
@@ -214,8 +234,41 @@ export function createSyncHandler(opts: SyncServerOptions) {
   const authFailureLog = opts.authFailureLog ?? ((line: string) => process.stderr.write(line))
   const runExclusive = createMutex()
 
+  const allowedOrigins = opts.allowedOrigins
+
   return async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const path = (req.url ?? '').split('?')[0].replace(/\/+$/, '') || '/'
+
+    // Opt-in CORS (see SyncServerOptions.allowedOrigins). With no allowlist
+    // configured this whole block is inert — zero CORS headers, OPTIONS falls
+    // through to the pre-existing handling (auth gate → 401 on /state).
+    if (allowedOrigins && allowedOrigins.size > 0 && (path === '/state' || path === '/health')) {
+      const originHeader = req.headers.origin
+      const origin = Array.isArray(originHeader) ? originHeader[0] : originHeader
+      const matched = origin !== undefined && allowedOrigins.has(origin)
+      if (matched) {
+        // Echo the ONE matching origin (never *), and tell caches the answer
+        // is origin-dependent. ETag must be readable cross-origin — the
+        // client's whole optimistic-concurrency loop rides on it.
+        res.setHeader('access-control-allow-origin', origin)
+        res.setHeader('vary', 'Origin')
+        res.setHeader('access-control-expose-headers', 'ETag')
+      }
+      if (req.method === 'OPTIONS') {
+        // Preflight: tokenless 204 by design (browsers strip credentials from
+        // preflights, so requiring auth here would break every cross-origin
+        // client) — but it NEVER reads state, and a non-matching origin gets
+        // no CORS headers at all, so the browser refuses the real request.
+        if (matched) {
+          res.setHeader('access-control-allow-methods', 'GET,PUT,OPTIONS')
+          res.setHeader('access-control-allow-headers', 'Authorization,Content-Type,If-Match')
+          res.setHeader('access-control-max-age', '86400')
+        }
+        res.writeHead(204)
+        res.end()
+        return
+      }
+    }
 
     // Unauthenticated liveness probe — NEVER reads/leaks brewery data, no auth
     // header required. Must stay ahead of the /state auth gate below.
@@ -353,8 +406,46 @@ export function createSyncServer(opts: SyncServerOptions): Server {
  *   SYNC_TOKEN_HASHES      comma-separated sha256-hex device-token hashes (required)
  *   SYNC_PORT              listen port (default 8787)
  *   SYNC_KEEP_GENERATIONS  prior `.bak` generations to retain on PUT (default 10, 0 disables)
+ *   SYNC_ALLOWED_ORIGINS   opt-in CORS: comma-separated EXACT origins (no wildcard —
+ *                          see SyncServerOptions.allowedOrigins). Unset = no CORS
+ *                          headers at all (same-origin deploys need none).
  * Caddy is the sole ingress; this daemon never binds a public interface.
  */
+
+/** Parse + validate SYNC_ALLOWED_ORIGINS. Exported for tests. Throws on a
+ *  wildcard or anything that isn't a bare origin (scheme://host[:port]) — a
+ *  misconfigured allowlist should refuse to start, not silently never match. */
+export function parseAllowedOrigins(raw: string | undefined): Set<string> | undefined {
+  const trimmed = raw?.trim()
+  if (!trimmed) return undefined
+  const entries = trimmed
+    .split(',')
+    .map((s) => s.trim().replace(/\/+$/, ''))
+    .filter((s) => s.length > 0)
+  if (entries.length === 0) return undefined
+  for (const entry of entries) {
+    if (entry.includes('*')) {
+      throw new Error(
+        'SYNC_ALLOWED_ORIGINS must list exact origins — wildcards are not supported (see docs/deploy/README.md)',
+      )
+    }
+    let parsed: URL
+    try {
+      parsed = new URL(entry)
+    } catch {
+      throw new Error(`SYNC_ALLOWED_ORIGINS entry is not a valid origin: ${entry}`)
+    }
+    // A bare origin round-trips through URL.origin unchanged; anything with a
+    // path/query/credentials does not (and would never match a browser Origin header).
+    if (parsed.origin !== entry) {
+      throw new Error(
+        `SYNC_ALLOWED_ORIGINS entry must be a bare origin (scheme://host[:port]), got: ${entry}`,
+      )
+    }
+  }
+  return new Set(entries)
+}
+
 export function startFromEnv(): Server {
   const filePath = process.env.BREWERY_FILE?.trim()
   if (!filePath) throw new Error('BREWERY_FILE is required')
@@ -371,11 +462,17 @@ export function startFromEnv(): Server {
     keepGenerationsRaw && /^\d+$/.test(keepGenerationsRaw)
       ? Number(keepGenerationsRaw)
       : DEFAULT_KEEP_GENERATIONS
-  const server = createSyncServer({ filePath, tokenHashes: new Set(hashes), keepGenerations })
+  const allowedOrigins = parseAllowedOrigins(process.env.SYNC_ALLOWED_ORIGINS)
+  const server = createSyncServer({
+    filePath,
+    tokenHashes: new Set(hashes),
+    keepGenerations,
+    ...(allowedOrigins ? { allowedOrigins } : {}),
+  })
   server.listen(port, '127.0.0.1', () => {
     // Log the bind only — NEVER tokens, auth headers, or bodies.
     console.error(
-      `[sync] listening on 127.0.0.1:${port}, file=${filePath}, devices=${hashes.length}`,
+      `[sync] listening on 127.0.0.1:${port}, file=${filePath}, devices=${hashes.length}, cors-origins=${allowedOrigins?.size ?? 0}`,
     )
   })
   return server

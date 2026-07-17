@@ -37,6 +37,27 @@ import { EMPTY_ETAG_SENTINEL } from '@/lib/sync/etag'
 /** The wire payload — the DumpV9 backup envelope. */
 export type SyncPayload = DumpV9
 
+/**
+ * Thrown by `HttpSyncTransport` when the daemon answers a pull/push with a
+ * non-OK status that is NOT part of the typed precondition contract (412/428
+ * return typed results instead — see module doc). Carries the HTTP status so
+ * UI callers can map it to a human message (401 auth, 400 version-reject, …)
+ * without string-matching. The message keeps the exact legacy format
+ * (`sync <op> failed: <status>`) — and NEVER includes the token, the
+ * Authorization header, or the response body.
+ */
+export class SyncHttpError extends Error {
+  readonly op: 'pull' | 'push'
+  readonly status: number
+
+  constructor(op: 'pull' | 'push', status: number) {
+    super(`sync ${op} failed: ${status}`)
+    this.name = 'SyncHttpError'
+    this.op = op
+    this.status = status
+  }
+}
+
 /** Result of `pull()`. `etag` is `null` iff `payload` is `null`. */
 export interface SyncPullResult {
   payload: SyncPayload | null
@@ -120,7 +141,14 @@ export class HttpSyncTransport implements SyncTransport {
   constructor(opts: HttpSyncTransportOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/+$/, '')
     this.token = opts.token
-    this.fetchImpl = opts.fetchImpl ?? fetch
+    // Wrapped, NOT `?? fetch` bare: storing the global fetch on an instance
+    // property means later calls run as `this.fetchImpl(...)` with `this` set
+    // to the transport — and the browser's window.fetch is this-sensitive, so
+    // that throws `TypeError: Illegal invocation` before any request is made.
+    // (Node's fetch doesn't care, which is why only real-browser use hit it.)
+    // The arrow wrapper calls fetch as a plain function, which WebIDL resolves
+    // to the realm's global — correct in browser, Node, and workers alike.
+    this.fetchImpl = opts.fetchImpl ?? ((input, init) => fetch(input, init))
   }
 
   private headers(): Record<string, string> {
@@ -135,7 +163,7 @@ export class HttpSyncTransport implements SyncTransport {
     // on the 204 (see sync-server.ts) — the transport-level contract is simply
     // etag: null iff payload: null; callers never see the sentinel.
     if (res.status === 204 || res.status === 404) return { payload: null, etag: null }
-    if (!res.ok) throw new Error(`sync pull failed: ${res.status}`)
+    if (!res.ok) throw new SyncHttpError('pull', res.status)
     const body = (await res.json()) as unknown
     // Shape-guard the response so a malformed body fails HERE with a clear error
     // rather than throwing deep inside the merge (mergeDumpTables deref of .tables).
@@ -173,7 +201,7 @@ export class HttpSyncTransport implements SyncTransport {
     if (res.status === 428) {
       return { ok: false, status: 428 }
     }
-    if (!res.ok) throw new Error(`sync push failed: ${res.status}`)
+    if (!res.ok) throw new SyncHttpError('push', res.status)
     const etag = res.headers.get('etag')
     if (!etag) {
       throw new Error('sync push succeeded (200) but the server returned no ETag header')
