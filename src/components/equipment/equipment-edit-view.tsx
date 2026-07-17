@@ -4,6 +4,9 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { type UseFormReturn, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
+import { UnitNumberInput } from '@/components/ui/unit-number-input'
+import { useDisplayUnits } from '@/hooks/use-display-units'
+import { type QuantityKind, unitLabel } from '@/lib/brewing/convert/display-units'
 import { type EquipmentProfile, EquipmentProfileSchema } from '@/lib/brewing/types/equipment'
 import { equipmentRepo } from '@/lib/db/repos/equipment'
 import { newId } from '@/lib/utils/id'
@@ -38,9 +41,26 @@ type NumFieldProps = {
   name: keyof EquipmentProfile
   form: UseFormReturn<EquipmentProfile>
   step?: string
+  /** When set, the field is edited in display units and stored canonical metric. */
+  kind?: QuantityKind
 }
 
-function NumField({ label, name, form, step = '0.1' }: NumFieldProps) {
+function NumField({ label, name, form, step = '0.1', kind }: NumFieldProps) {
+  if (kind) {
+    return (
+      <label className="flex flex-col gap-1">
+        <span className="text-xs">{label}</span>
+        <UnitNumberInput
+          control={form.control}
+          name={name}
+          kind={kind}
+          step={step}
+          aria-label={label}
+          className="field"
+        />
+      </label>
+    )
+  }
   return (
     <label className="flex flex-col gap-1">
       <span className="text-xs">{label}</span>
@@ -112,6 +132,7 @@ export function EquipmentEditView({ mode }: { mode: 'new' | 'edit' }) {
     register,
     formState: { errors },
   } = form
+  const units = useDisplayUnits()
 
   if (status === 'loading') {
     return <p className="py-16 text-center text-sm text-muted-foreground">Loading profile…</p>
@@ -155,29 +176,57 @@ export function EquipmentEditView({ mode }: { mode: 'new' | 'edit' }) {
       </section>
 
       <fieldset className="rounded-lg border border-border bg-card/40 p-4">
-        <legend className="px-2 text-sm font-semibold">Volumes (L)</legend>
+        <legend className="px-2 text-sm font-semibold">
+          Volumes ({unitLabel('volume', units)})
+        </legend>
         <div className="grid gap-3 md:grid-cols-3">
-          <NumField label="Mash tun volume" name="mashTunVolume_L" form={form} />
-          <NumField label="Mash tun dead space" name="mashTunDeadSpace_L" form={form} />
-          <NumField label="Kettle volume" name="kettleVolume_L" form={form} />
-          <NumField label="Kettle dead space" name="kettleDeadSpace_L" form={form} />
-          <NumField label="Fermenter volume" name="fermenterVolume_L" form={form} />
-          <NumField label="Fermenter dead space" name="fermenterDeadSpace_L" form={form} />
+          <NumField label="Mash tun volume" name="mashTunVolume_L" form={form} kind="volume" />
+          <NumField
+            label="Mash tun dead space"
+            name="mashTunDeadSpace_L"
+            form={form}
+            kind="volume"
+          />
+          <NumField label="Kettle volume" name="kettleVolume_L" form={form} kind="volume" />
+          <NumField label="Kettle dead space" name="kettleDeadSpace_L" form={form} kind="volume" />
+          <NumField label="Fermenter volume" name="fermenterVolume_L" form={form} kind="volume" />
+          <NumField
+            label="Fermenter dead space"
+            name="fermenterDeadSpace_L"
+            form={form}
+            kind="volume"
+          />
         </div>
       </fieldset>
 
       <fieldset className="rounded-lg border border-border bg-card/40 p-4">
         <legend className="px-2 text-sm font-semibold">Process</legend>
         <div className="grid gap-3 md:grid-cols-3">
-          <NumField label="Evaporation rate (L/hr)" name="evaporationRate_LperHr" form={form} />
-          <NumField label="Cooling shrinkage (%)" name="coolingShrinkage_pct" form={form} />
-          <NumField label="Top-up kettle (L)" name="topUpKettle_L" form={form} />
-          <NumField label="Top-up water (L)" name="topUpWater_L" form={form} />
           <NumField
-            label="Grain absorption (L/kg)"
+            label={`Evaporation rate (${unitLabel('volume-rate', units)})`}
+            name="evaporationRate_LperHr"
+            form={form}
+            kind="volume-rate"
+          />
+          <NumField label="Cooling shrinkage (%)" name="coolingShrinkage_pct" form={form} />
+          <NumField
+            label={`Top-up kettle (${unitLabel('volume', units)})`}
+            name="topUpKettle_L"
+            form={form}
+            kind="volume"
+          />
+          <NumField
+            label={`Top-up water (${unitLabel('volume', units)})`}
+            name="topUpWater_L"
+            form={form}
+            kind="volume"
+          />
+          <NumField
+            label={`Grain absorption (${unitLabel('mash-ratio', units)})`}
             name="grainAbsorption_LperKg"
             form={form}
             step="0.01"
+            kind="mash-ratio"
           />
           <NumField
             label="Hop utilization mult."

@@ -3,9 +3,16 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
+import { useDisplayNumberState } from '@/hooks/use-display-units'
 import { calcOG } from '@/lib/brewing/calc/gravity'
 import { calculateRecipe } from '@/lib/brewing/calc/pipeline'
 import { srmToHex } from '@/lib/brewing/calc/srm-color'
+import {
+  formatAmount,
+  formatForInput,
+  formatWithUnit,
+  unitLabel,
+} from '@/lib/brewing/convert/display-units'
 import { B40PRO_PROFILE } from '@/lib/brewing/defaults/b40pro'
 import { duplicateRecipe } from '@/lib/brewing/recipe/duplicate'
 import { scaleRecipe, scaleToOG, withFreshTargets } from '@/lib/brewing/recipe/scale'
@@ -27,7 +34,9 @@ export function RecipeActions({ recipe }: { recipe: Recipe }) {
 
   const [scaling, setScaling] = useState(false)
   const [mode, setMode] = useState<ScaleMode>('size')
-  const [newSize, setNewSize] = useState(String(recipe.batchSize_L))
+  // Edited in display units (gal when imperial); `newSize.canonical` is liters.
+  const newSize = useDisplayNumberState(recipe.batchSize_L, 'volume')
+  const units = newSize.units
   const [targetOG, setTargetOG] = useState(() =>
     (recipe.targets?.OG ?? calcOG(recipe, equipment)).toFixed(3),
   )
@@ -43,9 +52,8 @@ export function RecipeActions({ recipe }: { recipe: Recipe }) {
     let error: string | null = null
     try {
       if (mode === 'size') {
-        const size = Number(newSize)
-        if (!Number.isFinite(size) || size <= 0)
-          throw new Error('Enter a batch size greater than 0')
+        const size = newSize.canonical
+        if (size == null || size <= 0) throw new Error('Enter a batch size greater than 0')
         scaled = scaleRecipe(recipe, size)
       } else {
         const og = Number(targetOG)
@@ -57,7 +65,7 @@ export function RecipeActions({ recipe }: { recipe: Recipe }) {
     }
     const after = scaled ? calculateRecipe(scaled, equipment, now) : null
     return { before, scaled, after, error }
-  }, [recipe, equipment, mode, newSize, targetOG])
+  }, [recipe, equipment, mode, newSize.canonical, targetOG])
 
   async function onDuplicate() {
     const copy = duplicateRecipe(recipe, { id: newId(), now: new Date().toISOString() })
@@ -83,7 +91,7 @@ export function RecipeActions({ recipe }: { recipe: Recipe }) {
       setScaling(false)
       toast.success(
         mode === 'size'
-          ? `Scaled to ${Number(newSize)} L`
+          ? `Scaled to ${formatWithUnit(scaled.batchSize_L, 'volume', units)}`
           : `Scaled to OG ${Number(targetOG).toFixed(3)}`,
       )
       router.push(`/recipes/view/?id=${saved.id}`)
@@ -177,13 +185,13 @@ export function RecipeActions({ recipe }: { recipe: Recipe }) {
 
             {mode === 'size' ? (
               <label className="water-field">
-                <span>New batch size (L)</span>
+                <span>New batch size ({unitLabel('volume', units)})</span>
                 <input
                   type="number"
-                  step="0.5"
-                  min="0.5"
-                  value={newSize}
-                  onChange={(e) => setNewSize(e.target.value)}
+                  step={units === 'imperial' ? '0.25' : '0.5'}
+                  min="0"
+                  value={newSize.text}
+                  onChange={(e) => newSize.setText(e.target.value)}
                   className="field"
                 />
               </label>
@@ -213,9 +221,13 @@ export function RecipeActions({ recipe }: { recipe: Recipe }) {
                 </thead>
                 <tbody>
                   <tr>
-                    <td>Batch size (L)</td>
-                    <td>{recipe.batchSize_L}</td>
-                    <td>{preview.scaled ? preview.scaled.batchSize_L : '—'}</td>
+                    <td>Batch size ({unitLabel('volume', units)})</td>
+                    <td>{formatForInput(recipe.batchSize_L, 'volume', units)}</td>
+                    <td>
+                      {preview.scaled
+                        ? formatForInput(preview.scaled.batchSize_L, 'volume', units)
+                        : '—'}
+                    </td>
                   </tr>
                   <tr>
                     <td>OG</td>
@@ -235,9 +247,13 @@ export function RecipeActions({ recipe }: { recipe: Recipe }) {
                     <td>{preview.after ? <SrmCell srm={preview.after.SRM} /> : '—'}</td>
                   </tr>
                   <tr>
-                    <td>Total grain (kg)</td>
-                    <td>{grainMassKg(recipe).toFixed(3)}</td>
-                    <td>{preview.scaled ? grainMassKg(preview.scaled).toFixed(3) : '—'}</td>
+                    <td>Total grain ({unitLabel('mass-grain', units)})</td>
+                    <td>{formatAmount(grainMassKg(recipe), 'mass-grain', units)}</td>
+                    <td>
+                      {preview.scaled
+                        ? formatAmount(grainMassKg(preview.scaled), 'mass-grain', units)
+                        : '—'}
+                    </td>
                   </tr>
                 </tbody>
               </table>

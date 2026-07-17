@@ -7,6 +7,8 @@ import { DeductionReview } from '@/components/inventory/deduction-review'
 import { StarRating } from '@/components/ui/star-rating'
 import { HarvestForm } from '@/components/yeast/harvest-form'
 import { useBatchReadings } from '@/hooks/use-batch-readings'
+import { useDisplayUnits } from '@/hooks/use-display-units'
+import { formatAmount, unitLabel } from '@/lib/brewing/convert/display-units'
 import { cToF } from '@/lib/brewing/convert/temp'
 import type { Batch } from '@/lib/brewing/types/batch'
 import type { Reading } from '@/lib/brewing/types/reading'
@@ -316,6 +318,11 @@ export function BatchSheetView() {
   const [missing, setMissing] = useState(false)
   const [showDeduct, setShowDeduct] = useState(false)
   const [showHarvest, setShowHarvest] = useState(false)
+  const units = useDisplayUnits()
+  // Actuals arrive as canonical liters (number) or preformatted strings; only
+  // numbers are converted for display.
+  const fmtVol = (v: number | string | boolean | undefined): string =>
+    typeof v === 'number' ? formatAmount(v, 'volume', units) : fmt(v)
 
   useEffect(() => {
     let alive = true
@@ -379,7 +386,7 @@ export function BatchSheetView() {
       </section>
 
       <section className="logsheet-section">
-        <h2 className="logsheet-section-title">Volumes (L)</h2>
+        <h2 className="logsheet-section-title">Volumes ({unitLabel('volume', units)})</h2>
         <table className="sheet-table">
           <thead>
             <tr>
@@ -391,13 +398,13 @@ export function BatchSheetView() {
           <tbody>
             <tr>
               <td>Pre-boil</td>
-              {t && <td>{t.volumes.preBoilVolume_L.toFixed(2)}</td>}
-              <td className="sheet-actual">{fmt(actual.preBoilVolume_L)}</td>
+              {t && <td>{formatAmount(t.volumes.preBoilVolume_L, 'volume', units)}</td>}
+              <td className="sheet-actual">{fmtVol(actual.preBoilVolume_L)}</td>
             </tr>
             <tr>
               <td>Into fermenter</td>
-              {t && <td>{t.volumes.intoFermenter_L.toFixed(2)}</td>}
-              <td className="sheet-actual">{fmt(actual.intoFermenter_L)}</td>
+              {t && <td>{formatAmount(t.volumes.intoFermenter_L, 'volume', units)}</td>}
+              <td className="sheet-actual">{fmtVol(actual.intoFermenter_L)}</td>
             </tr>
           </tbody>
         </table>

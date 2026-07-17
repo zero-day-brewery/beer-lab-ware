@@ -3,12 +3,20 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
+import { useDisplayUnits } from '@/hooks/use-display-units'
 import { calculateRecipe } from '@/lib/brewing/calc/pipeline'
 import { srmIsDark, srmToHex } from '@/lib/brewing/calc/srm-color'
+import {
+  formatAmount,
+  formatForInput,
+  formatWithUnit,
+  unitLabel,
+} from '@/lib/brewing/convert/display-units'
 import { B40PRO_PROFILE } from '@/lib/brewing/defaults/b40pro'
 import { calcStepInfusions } from '@/lib/brewing/mash/step-infusions'
 import { findStyle } from '@/lib/brewing/styles/bjcp-2021'
 import type { Recipe } from '@/lib/brewing/types/recipe'
+import type { Units } from '@/lib/brewing/types/settings'
 import { recipeRepo } from '@/lib/db/repos/recipe'
 import { formatGravity } from '@/lib/format/gravity'
 import { useEquipmentStore } from '@/stores/equipment-store'
@@ -24,6 +32,7 @@ export function RecipeDetailView() {
   const { profiles } = useEquipmentStore()
   const { settings } = useSettingsStore()
   const gravityUnit = settings?.gravityUnit ?? 'sg'
+  const units = useDisplayUnits()
 
   useEffect(() => {
     if (!id) {
@@ -90,8 +99,8 @@ export function RecipeDetailView() {
           <span className="eyebrow">🍺 Brew sheet</span>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">{recipe.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {recipe.type.replace('-', ' ')} · {recipe.batchSize_L} L · {recipe.boilTime_min} min
-            boil
+            {recipe.type.replace('-', ' ')} · {formatForInput(recipe.batchSize_L, 'volume', units)}{' '}
+            {unitLabel('volume', units)} · {recipe.boilTime_min} min boil
             {recipe.styleId && (
               <>
                 {' · '}
@@ -145,7 +154,7 @@ export function RecipeDetailView() {
           <thead>
             <tr>
               <th>Name</th>
-              <th>Amount (kg)</th>
+              <th>Amount ({unitLabel('mass-grain', units)})</th>
               <th>Use</th>
               <th>Color (°L)</th>
             </tr>
@@ -154,7 +163,7 @@ export function RecipeDetailView() {
             {recipe.fermentables.map((f) => (
               <tr key={`${f.ingredientId}:${f.snapshot.name}:${f.usage}:${f.amount_kg}`}>
                 <td>{f.snapshot.name}</td>
-                <td>{f.amount_kg.toFixed(3)}</td>
+                <td>{formatAmount(f.amount_kg, 'mass-grain', units)}</td>
                 <td>{f.usage}</td>
                 <td>{f.snapshot.color_L}</td>
               </tr>
@@ -168,7 +177,7 @@ export function RecipeDetailView() {
           <thead>
             <tr>
               <th>Name</th>
-              <th>Amount (g)</th>
+              <th>Amount ({unitLabel('mass-hop', units)})</th>
               <th>AA%</th>
               <th>Use</th>
               <th>Time (min)</th>
@@ -178,7 +187,7 @@ export function RecipeDetailView() {
             {recipe.hops.map((h) => (
               <tr key={`${h.ingredientId}:${h.snapshot.name}:${h.use}:${h.time_min}:${h.amount_g}`}>
                 <td>{h.snapshot.name}</td>
-                <td>{h.amount_g.toFixed(1)}</td>
+                <td>{formatAmount(h.amount_g, 'mass-hop', units)}</td>
                 <td>{h.snapshot.alphaAcid_pct}</td>
                 <td>{h.use}</td>
                 <td>{h.time_min}</td>
@@ -194,7 +203,7 @@ export function RecipeDetailView() {
             <tr>
               <th>Step</th>
               <th>Type</th>
-              <th>Temp (°C)</th>
+              <th>Temp ({unitLabel('temp', units)})</th>
               <th>Time (min)</th>
               <th>Infusion water</th>
             </tr>
@@ -206,10 +215,14 @@ export function RecipeDetailView() {
                 <tr key={`${s.name}:${s.type}:${s.temperature_C}:${s.time_min}`}>
                   <td>{s.name}</td>
                   <td>{s.type}</td>
-                  <td>{s.temperature_C}</td>
+                  <td>{formatForInput(s.temperature_C, 'temp', units)}</td>
                   <td>{s.time_min}</td>
                   <td>
-                    {inf != null ? `+${inf.toFixed(1)} L @ 100 °C` : i === 0 ? 'strike' : '—'}
+                    {inf != null
+                      ? `+${formatAmount(inf, 'volume', units, 1)} ${unitLabel('volume', units)} @ ${formatWithUnit(100, 'temp', units, 0)}`
+                      : i === 0
+                        ? 'strike'
+                        : '—'}
                   </td>
                 </tr>
               )
@@ -244,7 +257,7 @@ export function RecipeDetailView() {
       )}
 
       {result && (
-        <SheetSection title="Volumes (L)">
+        <SheetSection title={`Volumes (${unitLabel('volume', units)})`}>
           <table className="sheet-table">
             <thead>
               <tr>
@@ -254,14 +267,14 @@ export function RecipeDetailView() {
               </tr>
             </thead>
             <tbody>
-              <VolRow label="Mash water" v={result.volumes.mashWater_L} />
-              <VolRow label="Sparge" v={result.volumes.spargeWater_L} />
-              <VolRow label="Pre-boil" v={result.volumes.preBoilVolume_L} />
-              <VolRow label="Post-boil" v={result.volumes.postBoilVolume_L} />
-              <VolRow label="Into fermenter" v={result.volumes.intoFermenter_L} />
+              <VolRow label="Mash water" v={result.volumes.mashWater_L} units={units} />
+              <VolRow label="Sparge" v={result.volumes.spargeWater_L} units={units} />
+              <VolRow label="Pre-boil" v={result.volumes.preBoilVolume_L} units={units} />
+              <VolRow label="Post-boil" v={result.volumes.postBoilVolume_L} units={units} />
+              <VolRow label="Into fermenter" v={result.volumes.intoFermenter_L} units={units} />
               <tr>
                 <td>Strike temp</td>
-                <td>{result.strikeTemp_C.toFixed(1)} °C</td>
+                <td>{formatWithUnit(result.strikeTemp_C, 'temp', units, 1)}</td>
                 <td className="sheet-actual" />
               </tr>
             </tbody>
@@ -328,11 +341,11 @@ function SheetSection({ title, children }: { title: string; children: ReactNode 
   )
 }
 
-function VolRow({ label, v }: { label: string; v: number }) {
+function VolRow({ label, v, units }: { label: string; v: number; units: Units }) {
   return (
     <tr>
       <td>{label}</td>
-      <td>{v.toFixed(2)}</td>
+      <td>{formatAmount(v, 'volume', units)}</td>
       <td className="sheet-actual" />
     </tr>
   )

@@ -4,7 +4,9 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useWaterPlan } from '@/components/system/use-water-plan'
+import { useDisplayNumberState } from '@/hooks/use-display-units'
 import { calculateRecipe } from '@/lib/brewing/calc/pipeline'
+import { formatWithUnit, unitLabel } from '@/lib/brewing/convert/display-units'
 import { B40PRO_PROFILE } from '@/lib/brewing/defaults/b40pro'
 import { planYeastPitch, type YeastPitchPlan } from '@/lib/brewing/inventory/yeast-pitch-plan'
 import { MANUAL_VERSION } from '@/lib/brewing/process'
@@ -143,7 +145,9 @@ export function BrewStartGate({ onClose }: { onClose: () => void }) {
   // (also falsy under `||`) — see effectiveYeastLotId below.
   const [chosenYeastLotId, setChosenYeastLotId] = useState<string | null>(null)
   const [manualStyle, setManualStyle] = useState<WaterStyleKey>('balanced')
-  const [manualVolume, setManualVolume] = useState('30')
+  // Edited in display units (gal when imperial); `.canonical` is liters.
+  const manualVolume = useDisplayNumberState(30, 'volume')
+  const units = manualVolume.units
   const [sourceId, setSourceId] = useState('') // '' = custom
   const [custom, setCustom] = useState<IonProfile>(ZERO_PROFILE)
 
@@ -160,7 +164,7 @@ export function BrewStartGate({ onClose }: { onClose: () => void }) {
     source,
     sourceName,
     manualStyle,
-    manualVolume_L: Math.max(0, num(manualVolume)),
+    manualVolume_L: Math.max(0, manualVolume.canonical ?? 0),
     now: new Date().toISOString(),
   })
 
@@ -347,11 +351,11 @@ export function BrewStartGate({ onClose }: { onClose: () => void }) {
               </select>
             </label>
             <label className="water-field">
-              <span>Total water (L)</span>
+              <span>Total water ({unitLabel('volume', units)})</span>
               <input
                 type="number"
-                value={manualVolume}
-                onChange={(e) => setManualVolume(e.target.value)}
+                value={manualVolume.text}
+                onChange={(e) => manualVolume.setText(e.target.value)}
                 className="field"
               />
             </label>
@@ -394,7 +398,8 @@ export function BrewStartGate({ onClose }: { onClose: () => void }) {
             <div className="water-row">
               <b>Target</b>
               <span>
-                {calc.styleKey} · for {calc.totalWater_L.toFixed(1)} L total water
+                {calc.styleKey} · for {formatWithUnit(calc.totalWater_L, 'volume', units, 1)} total
+                water
               </span>
             </div>
             <div>

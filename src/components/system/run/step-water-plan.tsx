@@ -2,6 +2,8 @@
 import type { JSX } from 'react'
 import type { WaterPlanResult } from '@/components/system/use-water-plan'
 import { useWaterPlan } from '@/components/system/use-water-plan'
+import { useDisplayUnits } from '@/hooks/use-display-units'
+import { formatWithUnit } from '@/lib/brewing/convert/display-units'
 import type { EquipmentProfile } from '@/lib/brewing/types/equipment'
 import type { Recipe } from '@/lib/brewing/types/recipe'
 import type { IonProfile, SaltKey } from '@/lib/brewing/water/ions'
@@ -60,6 +62,7 @@ export function toWaterPlanWrite(
 
 export function StepWaterPlan(props: StepWaterPlanProps): JSX.Element {
   const { recipe, equipment, source, sourceName, manualStyle, manualVolume_L, now } = props
+  const units = useDisplayUnits()
   const calc = useWaterPlan({
     recipe,
     equipment,
@@ -77,7 +80,8 @@ export function StepWaterPlan(props: StepWaterPlanProps): JSX.Element {
           <div className="water-row">
             <b>Target</b>
             <span>
-              {calc.styleKey} · for {calc.totalWater_L.toFixed(1)} L total water
+              {calc.styleKey} · for {formatWithUnit(calc.totalWater_L, 'volume', units, 1)} total
+              water
             </span>
           </div>
           <div>

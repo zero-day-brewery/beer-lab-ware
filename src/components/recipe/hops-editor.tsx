@@ -1,11 +1,15 @@
 'use client'
 import { useFieldArray, useFormContext } from 'react-hook-form'
+import { UnitNumberInput } from '@/components/ui/unit-number-input'
+import { useDisplayUnits } from '@/hooks/use-display-units'
+import { unitLabel } from '@/lib/brewing/convert/display-units'
 import type { Recipe } from '@/lib/brewing/types/recipe'
 import { newId } from '@/lib/utils/id'
 
 export function HopsEditor() {
   const { register, control } = useFormContext<Recipe>()
   const { fields, append, remove } = useFieldArray({ control, name: 'hops' })
+  const units = useDisplayUnits()
 
   return (
     <section className="flex flex-col gap-3">
@@ -71,11 +75,12 @@ export function HopsEditor() {
                   </select>
                 </label>
                 <label className="flex flex-col gap-0.5">
-                  <span className="text-xs">Amount (g)</span>
-                  <input
-                    type="number"
-                    step="1"
-                    {...register(`hops.${i}.amount_g` as const, { valueAsNumber: true })}
+                  <span className="text-xs">Amount ({unitLabel('mass-hop', units)})</span>
+                  <UnitNumberInput
+                    control={control}
+                    name={`hops.${i}.amount_g` as const}
+                    kind="mass-hop"
+                    step={units === 'imperial' ? '0.05' : '1'}
                     className="rounded border border-input bg-background px-2 py-1 text-sm"
                   />
                 </label>

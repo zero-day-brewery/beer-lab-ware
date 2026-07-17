@@ -20,6 +20,19 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **App-wide imperial display units.** The Settings "imperial (gal / lb / °F)"
+  preference now converts every major surface — recipe editor (batch size gal,
+  fermentables lb, hops oz, mash temps °F), recipe brew sheet + cards, live
+  calculation panel, scale-recipe modal, batch-sheet volumes, calculators
+  (strike temp °F + qt/lb, pitch rate gal, carbonation temps °F), equipment
+  profiles (vessel volumes gal, evaporation gal/hr, grain absorption qt/lb),
+  brew-start water gate, and guided brew-day value displays. Storage stays
+  canonical metric (L / kg / g / °C) — a display/parse layer only
+  (`convert/display-units.ts`, `useDisplayUnits`, `UnitNumberInput`), so
+  existing data, dumps, and BeerXML round-trips are untouched. An e2e spec
+  locks the toggle against regression. Deliberately unconverted: inventory +
+  misc amounts (freeform per-item units), water-salt grams + lactic mL
+  (brewing convention), Brix, psi, yeast slurry mL.
 - **In-app sync connection UI — multi-device sync is now end-to-end usable.** This
   closes the gap where the daemon + client sync library shipped fully tested but no
   UI could reach them (README used to say "the in-app connection UI is still on the

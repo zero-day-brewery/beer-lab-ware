@@ -1,6 +1,8 @@
 'use client'
 import { FlaskConical } from 'lucide-react'
 import { useState } from 'react'
+import { useDisplayNumberState } from '@/hooks/use-display-units'
+import { formatForInput, unitLabel } from '@/lib/brewing/convert/display-units'
 import { calcPitchRate, type PitchStyle } from '@/lib/brewing/pitch/pitch-rate'
 import {
   CalcCard,
@@ -25,15 +27,17 @@ const STYLE_LABELS: Record<PitchStyle, string> = {
  * the dry-yeast gram estimate (cells_B ÷ 20 B/g).
  */
 export function PitchRateCard() {
-  const [batchStr, setBatchStr] = useState('20')
+  // Edited in display units (gal when imperial); `.canonical` is liters.
+  const batch = useDisplayNumberState(20, 'volume')
+  const units = batch.units
   const [ogStr, setOgStr] = useState('1.050')
   const [style, setStyle] = useState<PitchStyle>('ale')
 
-  const batchSize_L = Number(batchStr)
+  const batchSize_L = batch.canonical
   const og = Number(ogStr)
-  const valid = Number.isFinite(batchSize_L) && batchSize_L > 0 && Number.isFinite(og) && og > 1
+  const valid = batchSize_L != null && batchSize_L > 0 && Number.isFinite(og) && og > 1
 
-  const result = valid ? calcPitchRate({ batchSize_L, og, style }) : null
+  const result = valid ? calcPitchRate({ batchSize_L: batchSize_L as number, og, style }) : null
 
   return (
     <CalcCard
@@ -43,13 +47,13 @@ export function PitchRateCard() {
     >
       <CalcInputs>
         <CalcField
-          label="Batch (L)"
+          label={`Batch (${unitLabel('volume', units)})`}
           type="number"
-          step="0.5"
+          step={units === 'imperial' ? '0.25' : '0.5'}
           min="0"
-          value={batchStr}
-          placeholder="20"
-          onChange={(e) => setBatchStr(e.target.value)}
+          value={batch.text}
+          placeholder={formatForInput(20, 'volume', units)}
+          onChange={(e) => batch.setText(e.target.value)}
         />
         <CalcField
           label="OG"

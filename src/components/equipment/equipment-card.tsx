@@ -1,7 +1,11 @@
+'use client'
 import Link from 'next/link'
+import { useDisplayUnits } from '@/hooks/use-display-units'
+import { formatForInput, unitLabel } from '@/lib/brewing/convert/display-units'
 import type { EquipmentProfile } from '@/lib/brewing/types/equipment'
 
 export function EquipmentCard({ profile }: { profile: EquipmentProfile }) {
+  const units = useDisplayUnits()
   return (
     <Link
       href={`/equipment/edit/?id=${profile.id}`}
@@ -17,7 +21,8 @@ export function EquipmentCard({ profile }: { profile: EquipmentProfile }) {
         )}
       </div>
       <p className="mt-2 font-mono text-sm" style={{ color: 'var(--malt, var(--primary))' }}>
-        {profile.kettleVolume_L}L kettle · {profile.brewhouseEfficiency_pct}% eff
+        {formatForInput(profile.kettleVolume_L, 'volume', units)}
+        {unitLabel('volume', units)} kettle · {profile.brewhouseEfficiency_pct}% eff
       </p>
       <p className="mt-3 text-xs uppercase tracking-wide text-muted-foreground">
         IBU: {profile.ibuFormula} · SRM: {profile.srmFormula}
