@@ -20,6 +20,38 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Per-batch cost (COGS).** The data model always had both halves — inventory
+  prices (`pricePerUnit_USD`) and exact per-batch consumption (batchId-linked
+  ledger transactions) — and a new pure engine
+  (`src/lib/brewing/report/batch-cost.ts`) finally joins them. The batch sheet
+  gains a read-only **Batch Cost** section (line table, known total, cost per
+  liter — per gallon in imperial via the display-units layer), computed live
+  from the ledger. Honest by design: items with no price are listed but NEVER
+  estimated — they're excluded from the total and surfaced as "n items
+  unpriced"; `sync-reconcile` ledger entries are ignored (they're sync
+  accounting corrections, not consumption); returns/positive adjustments on a
+  batch reduce its cost; deleted inventory items still appear, named from the
+  recipe snapshot when recoverable. Cost per liter uses the measured
+  into-fermenter volume when present, else the recipe batch size. All money is
+  explicit **USD** (the only currency the price field stores) — no locale
+  guessing. Pure read-model: no storage schema change.
+- **Printable brew-day sheet.** The recipe brew sheet's existing Print button
+  now produces a clean one-pager: app chrome (header, sidebar, AI companion
+  FAB) and the on-screen brew-history section drop out in print, tables
+  tighten up, and a print-only **Brew-day actuals** block adds ruled blanks
+  (mash pH, pre-boil gravity, OG, FG, notes) to pencil in at the kettle. Mash
+  steps with strike/infusion values, water volumes, the hop schedule with
+  times, and OG/FG/ABV/IBU/SRM targets were already on the sheet — and honor
+  the units preference. All print rules live inside the single `@media print`
+  block (guarded by a unit test) so nothing leaks into screen rendering.
+- **Completed-batch record export (.xlsx) + readings CSV.** New batch-sheet
+  actions: **Batch record (.xlsx)** builds a workbook (`Batch` — metadata,
+  results vs targets, tasting; `Timeline` — log entries; `Readings`; plus
+  `Cost` whenever the batch has costed ledger lines) via the same ReportColumn
+  machinery as the inventory report, with volumes/temps in the user's display
+  units; **Readings CSV** exports the fermentation readings (ISO timestamp,
+  gravity, tempC, pH, note) through a small RFC-4180 serializer (quoted/escaped
+  notes, CRLF, canonical °C with the unit named in the header).
 - **App-wide imperial display units.** The Settings "imperial (gal / lb / °F)"
   preference now converts every major surface — recipe editor (batch size gal,
   fermentables lb, hops oz, mash temps °F), recipe brew sheet + cards, live

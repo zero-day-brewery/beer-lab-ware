@@ -282,16 +282,56 @@ export function RecipeDetailView() {
         </SheetSection>
       )}
 
+      <BrewDayActuals />
+
       {recipe.notes_md.trim() && (
         <SheetSection title="Notes">
           <p className="whitespace-pre-wrap text-sm text-muted-foreground">{recipe.notes_md}</p>
         </SheetSection>
       )}
 
-      <SheetSection title="Brew history">
-        <BrewHistory recipe={recipe} />
-      </SheetSection>
+      {/* Brew history is a screen affordance — the printed brew-day sheet ends at the notes. */}
+      <div className="print:hidden">
+        <SheetSection title="Brew history">
+          <BrewHistory recipe={recipe} />
+        </SheetSection>
+      </div>
     </article>
+  )
+}
+
+/**
+ * Print-only brew-day actuals — blank ruled cells to pencil in measurements at
+ * the kettle. `hidden print:block` keeps it entirely out of screen rendering;
+ * the `.print-blank` rule lives INSIDE the @media print block in globals.css,
+ * so nothing can leak into screen styles.
+ */
+export function BrewDayActuals() {
+  const rows = [
+    'Mash pH',
+    'Pre-boil gravity',
+    'Original gravity (OG)',
+    'Final gravity (FG)',
+    'Brew-day notes',
+  ]
+  return (
+    <section className="hidden print:block" data-testid="brew-day-actuals">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        Brew-day actuals
+      </h2>
+      <table className="sheet-table">
+        <tbody>
+          {rows.map((label) => (
+            <tr key={label}>
+              <td>{label}</td>
+              <td className="sheet-actual">
+                <span className="print-blank" />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   )
 }
 

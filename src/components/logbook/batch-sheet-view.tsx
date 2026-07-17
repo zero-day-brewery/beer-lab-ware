@@ -4,6 +4,8 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { FermentationChart } from '@/components/charts/fermentation-chart'
 import { DeductionReview } from '@/components/inventory/deduction-review'
+import { BatchActions } from '@/components/logbook/batch-actions'
+import { BatchCostSection } from '@/components/logbook/batch-cost-section'
 import { StarRating } from '@/components/ui/star-rating'
 import { HarvestForm } from '@/components/yeast/harvest-form'
 import { useBatchReadings } from '@/hooks/use-batch-readings'
@@ -353,6 +355,7 @@ export function BatchSheetView() {
           #{batch.batchNo} · {batch.name}
         </h1>
         <span className={`logsheet-chip logsheet-chip--${batch.status}`}>{batch.status}</span>
+        <BatchActions batch={batch} />
       </header>
 
       <section className="logsheet-section">
@@ -434,6 +437,8 @@ export function BatchSheetView() {
           </button>
         </section>
       )}
+
+      <BatchCostSection batch={batch} />
 
       <FermentationReadings batchId={batch.id} />
 

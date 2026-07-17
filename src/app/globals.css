@@ -3192,41 +3192,6 @@ html[data-theme="metal-cyberpunk"] :focus-visible {
   outline-offset: 2px;
 }
 
-@media print {
-  .app-header,
-  .header-foam,
-  .report-actions,
-  .sidebar,
-  .mobile-topbar {
-    display: none;
-  }
-  body {
-    background: #fff;
-    color: #000;
-  }
-  main {
-    padding: 0;
-  }
-  .report-table th {
-    background: #eee;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  .report-group {
-    break-inside: avoid;
-  }
-  thead {
-    display: table-header-group;
-  }
-  .sheet-actual {
-    border-left: 1px solid #999;
-  }
-  .sheet,
-  .sheet-table {
-    break-inside: avoid;
-  }
-}
-
 /* ============================================================
    AI Brewing Companion — floating trigger + slide-over drawer
    Token-driven; reuses .tap-card / .field / .btn-primary / .icon-btn.
@@ -4048,4 +4013,102 @@ html[data-theme="metal-cyberpunk"] :focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
+}
+
+/* ===== @media print — MUST stay the LAST block in this file so every
+   print override wins same-specificity cascade ties against the screen
+   styles above (see tests/unit/app/print-css-guard.test.ts). ===== */
+@media print {
+  .app-header,
+  .header-foam,
+  .report-actions,
+  .sidebar,
+  .mobile-topbar,
+  .companion-fab,
+  .ferment-form,
+  .ferment-del,
+  .ferment-add,
+  .logsheet .btn-primary,
+  [data-sonner-toaster] {
+    display: none;
+  }
+  @page {
+    margin: 12mm;
+  }
+  /* Ruled blank for penciling in brew-day actuals. Defined ONLY inside this
+     print block — the section carrying it is `hidden print:block`, so neither
+     the markup nor this rule can affect screen rendering. */
+  .print-blank {
+    display: inline-block;
+    min-width: 10rem;
+    height: 1rem;
+    border-bottom: 1px solid #555;
+  }
+  /* Compact the brew sheet toward a one-pager. */
+  .sheet {
+    gap: 0.85rem;
+  }
+  .sheet-table th,
+  .sheet-table td {
+    padding: 0.2rem 0.5rem;
+  }
+  /* Print = ink on paper. Flatten EVERY theme to black-on-white by overriding
+     the design tokens: html[data-theme] ties with the per-theme token blocks
+     on specificity and this block comes later in the source, so it wins for
+     print without touching screen rendering. */
+  html,
+  html[data-theme] {
+    --background: #fff;
+    --foreground: #000;
+    --card: #fff;
+    --card-foreground: #000;
+    --popover: #fff;
+    --popover-foreground: #000;
+    --primary: #000;
+    --primary-foreground: #fff;
+    --secondary: #f3f3f3;
+    --secondary-foreground: #000;
+    --muted: #f3f3f3;
+    --muted-foreground: #444;
+    --accent: #f3f3f3;
+    --accent-foreground: #000;
+    --border: #999;
+    --input: #ccc;
+  }
+  /* html[data-theme] body matches the specificity of the per-theme atmosphere
+     rules (ambient gradients, CRT scanlines) so print wins the cascade. */
+  body,
+  html[data-theme] body {
+    background: #fff;
+    background-image: none; /* taproom ambience / theme atmosphere gradients */
+    color: #000;
+    /* The screen theme animates background/color over 280ms — a print frame
+       must snap to final ink-on-paper values instantly. */
+    transition: none;
+  }
+  body::before,
+  html[data-theme] body::before {
+    display: none; /* film-grain / scanline overlay */
+  }
+  main {
+    padding: 0;
+  }
+  .report-table th {
+    background: #eee;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .report-group {
+    break-inside: avoid;
+  }
+  thead {
+    display: table-header-group;
+  }
+  .sheet-actual {
+    border-left: 1px solid #999;
+  }
+  .sheet,
+  .sheet-table {
+    break-inside: avoid;
+  }
 }
