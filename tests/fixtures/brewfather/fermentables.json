@@ -1,0 +1,29 @@
+[
+  {
+    "_id": "bf-inv-ferm-pale",
+    "name": "Pale Ale Malt",
+    "type": "Grain",
+    "supplier": "Great Western",
+    "inventory": 12.5,
+    "potential": 1.037,
+    "color": 3.5,
+    "costPerAmount": 2.1,
+    "bestBeforeDate": 1767225600000
+  },
+  {
+    "_id": "bf-inv-ferm-oats",
+    "name": "Flaked Oats",
+    "type": "Adjunct",
+    "inventory": 2.25,
+    "potentialPercentage": 70
+  },
+  {
+    "_id": "bf-inv-ferm-euro",
+    "name": "Munich Malt",
+    "type": "Grain",
+    "inventory": 5,
+    "potential": 1.037,
+    "costPerAmount": 1.8,
+    "currency": "EUR"
+  }
+]

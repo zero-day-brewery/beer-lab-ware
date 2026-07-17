@@ -20,6 +20,18 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Brewfather migration importer.** The Import page can now migrate a whole
+  Brewfather brewery from its JSON export — recipes, batches (with recipe
+  snapshots, measured OG/FG/volumes, brew dates, and fermentation readings),
+  and ingredient inventory (fermentables / hops / yeasts / miscs). Preview
+  first: per-entity counts + a warnings list before anything is written.
+  Idempotent: ids derive deterministically from Brewfather `_id`s (dedicated
+  UUIDv5 namespace), so re-importing the same export duplicates nothing and
+  never overwrites rows you've edited since. Ledger-safe: every imported
+  inventory item is written atomically with its opening-balance transaction,
+  so the doctor's ledger invariant holds from the first import. Parsing is
+  version-tolerant and never guesses — ambiguous fields (dry-hop durations,
+  non-USD costs, unmappable units) are skipped with a per-row warning.
 - **Per-batch cost (COGS).** The data model always had both halves — inventory
   prices (`pricePerUnit_USD`) and exact per-batch consumption (batchId-linked
   ledger transactions) — and a new pure engine

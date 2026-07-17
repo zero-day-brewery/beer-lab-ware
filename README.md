@@ -36,6 +36,7 @@ any web server — or one-click deploy:
 ## Features
 
 - **Recipes** — a full recipe editor with real-time OG/FG/ABV/IBU/SRM calculations, BJCP style overlays, and BeerXML import/export.
+- **Brewfather migration** — import your Brewfather JSON export (recipes, batches with fermentation readings, and ingredient inventory) with a dry-run preview; re-importing never duplicates.
 - **Brew flow** — a guided, step-by-step brew day that walks you through mash, boil, and additions in order.
 - **Fermentation logging + charts** — log gravity and temperature readings over the course of a fermentation and see them plotted.
 - **Inventory** — track fermentables, hops, yeast, and misc ingredients, and draw them down as you brew.
