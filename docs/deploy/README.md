@@ -67,7 +67,8 @@ canonical until it happened to sync again.
   - Before each `PUT` overwrites the canonical file, the prior generation is
     snapshotted to a `.bak` (`SYNC_KEEP_GENERATIONS`, see below) — independent of, and
     without weakening, the atomic temp+rename of the write itself.
-- **`src/lib/node/brewery-store.ts`** — advanced to DumpV8 (matches the client) + the
+- **`src/lib/node/brewery-store.ts`** — advanced to DumpV9 (matches the client, incl.
+  `rowTombstones` for the sync merge's deletion tombstones) + the
   `assertLedgerInvariant` guard + `rotateGenerations` (the `.bak` snapshot/prune logic).
 - **`public/sw.js`** — `/state` is never cached (would poison pulls).
 - Tests: `tests/unit/node/{brewery-store,sync-server,sync-secret-exclusion}.test.ts`,
@@ -119,7 +120,7 @@ the server (or by your CI) from the checked-out source.
 
    ```bash
    curl -s https://<your-domain>/health
-   # expect: 200 {"ok":true,"daemonVersion":"0.1.0","supportedDumpVersions":[1,2,3,4,5,6,7,8]}
+   # expect: 200 {"ok":true,"daemonVersion":"0.1.0","supportedDumpVersions":[1,2,3,4,5,6,7,8,9]}
 
    curl -i -H "Authorization: Bearer <your-token>" https://<your-domain>/state
    # expect: 204 No Content before the first push (with `etag: "empty"`); 401 without/with a bad token
@@ -224,7 +225,7 @@ Healthchecks.io, a Caddy/nginx-level probe, your own cron+curl) directly at
 
 ```bash
 curl -s https://<your-domain>/health
-# {"ok":true,"daemonVersion":"0.1.0","supportedDumpVersions":[1,2,3,4,5,6,7,8]}
+# {"ok":true,"daemonVersion":"0.1.0","supportedDumpVersions":[1,2,3,4,5,6,7,8,9]}
 ```
 
 `daemonVersion` is the running daemon's `package.json` version (useful for confirming a

@@ -1,9 +1,9 @@
 {
-  "version": 8,
+  "version": 9,
   "exportedAt": "2026-07-08T00:00:00.000Z",
   "meta": {
-    "dumpVersion": 8,
-    "dbVersion": 9,
+    "dumpVersion": 9,
+    "dbVersion": 11,
     "rowCounts": {
       "recipes": 1,
       "equipmentProfiles": 1,
@@ -18,7 +18,8 @@
       "readings": 3,
       "stockTransactions": 0,
       "seedTombstones": 0,
-      "yeastLots": 0
+      "yeastLots": 0,
+      "rowTombstones": 0
     },
     "schemaVersion": 1
   },
@@ -64,7 +65,7 @@
         "srmFormula": "morey",
         "abvFormula": "simple",
         "hopUtilizationMultiplier": 1,
-        "calibrationNotes_md": "## Single-vessel RIMS system, 3.2 kW, ~9 kg max grist\n\nInstalled accessories (affect these defaults):\n- **Steam-condensing lid** — drops boil-off to ~1 L/hr (vs ~3–4 L/hr open boil)\n- **Insulation jacket** — holds mash temp during the 60 min rest\n- **Trub filter** — sits below the false bottom, keeps hot break out of the fermenter\n- **Sparge manifold** — improves lautering uniformity\n\n> Factory-style starting defaults — recalibrate after your first brew day.\n> Measure actual: evaporation rate, grain absorption, mash & brewhouse efficiency.",
+        "calibrationNotes_md": "## Single-vessel RIMS system, 3.2 kW, ~9 kg max grist\n\nInstalled accessories (affect these defaults):\n- **Steam-condensing lid** \u2014 drops boil-off to ~1 L/hr (vs ~3\u20134 L/hr open boil)\n- **Insulation jacket** \u2014 holds mash temp during the 60 min rest\n- **Trub filter** \u2014 sits below the false bottom, keeps hot break out of the fermenter\n- **Sparge manifold** \u2014 improves lautering uniformity\n\n> Factory-style starting defaults \u2014 recalibrate after your first brew day.\n> Measure actual: evaporation rate, grain absorption, mash & brewhouse efficiency.",
         "schemaVersion": 1
       }
     ],
@@ -131,6 +132,7 @@
     ],
     "stockTransactions": [],
     "seedTombstones": [],
-    "yeastLots": []
+    "yeastLots": [],
+    "rowTombstones": []
   }
 }

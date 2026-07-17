@@ -28,12 +28,12 @@ describe('DiagnosticsView', () => {
     expect(screen.getByRole('button', { name: /copy diagnostics/i })).toBeInTheDocument()
   })
 
-  it('lists appMeta among the tables (15 expected after v9 yeastLots) and shows verno 10', async () => {
+  it('lists appMeta among the tables (16 expected after v11 rowTombstones) and shows verno 11', async () => {
     render(<DiagnosticsView />)
     await waitFor(() => expect(screen.getByTestId('diag-database')).toBeInTheDocument())
     expect(screen.getByTestId('diag-table-appMeta')).toBeInTheDocument()
     expect(screen.getByTestId('diag-table-recipes')).toBeInTheDocument()
-    expect(screen.getByTestId('diag-verno')).toHaveTextContent('10')
+    expect(screen.getByTestId('diag-verno')).toHaveTextContent('11')
   })
 
   it('shows the SW state and build version (build-time stamp)', async () => {

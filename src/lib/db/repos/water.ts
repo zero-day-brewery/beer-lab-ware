@@ -17,7 +17,11 @@ export function makeWaterRepo(database: BrewDB) {
       return validated
     },
     async delete(id: string): Promise<void> {
-      await database.waterProfiles.delete(id)
+      const deletedAt = new Date().toISOString()
+      await database.transaction('rw', database.waterProfiles, database.rowTombstones, async () => {
+        await database.waterProfiles.delete(id)
+        await database.rowTombstones.put({ id, table: 'waterProfiles', deletedAt })
+      })
     },
   }
 }

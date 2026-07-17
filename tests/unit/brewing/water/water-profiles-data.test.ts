@@ -29,7 +29,7 @@ describe('water profiles data layer', () => {
   it('a v3 backup round-trips waterProfiles', async () => {
     await seedDefaults(db)
     const dump = await backupService.dump()
-    expect(dump.version).toBe(8)
+    expect(dump.version).toBe(9)
     await db.waterProfiles.clear()
     await backupService.restore(dump)
     expect((await waterRepo.list()).length).toBe(WATER_PROFILES.length)

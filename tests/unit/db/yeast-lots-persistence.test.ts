@@ -62,11 +62,11 @@ describe('yeastLotsRepo', () => {
 })
 
 describe('backup dump/restore — yeast lots', () => {
-  it('dump includes yeastLots and a v8 restore round-trips them', async () => {
+  it('dump includes yeastLots and a same-version restore round-trips them', async () => {
     const src = freshDb()
     await makeYeastLotsRepo(src).save(lot({ strain: 'Saison' }))
     const dumped = await makeBackupService(src).dump()
-    expect(dumped.version).toBe(8)
+    expect(dumped.version).toBe(9) // DUMP_VERSION — see dump-v9.test.ts for the envelope-bump coverage
     expect(dumped.tables.yeastLots.length).toBe(1)
 
     const dst = freshDb()

@@ -259,9 +259,9 @@ export function InventoryView() {
   const onDelete = async (id: string, name: string) => {
     if (!confirm(`Delete "${name}"?`)) return
     try {
+      // inventoryRepo.delete cascades the ledger delete + tombstones atomically
+      // (one Dexie transaction) — see db/repos/inventory.ts.
       await inventoryRepo.delete(id)
-      // Cascade the ledger so no orphan transactions survive the item.
-      await stockTransactionsRepo.deleteByItem(id)
       toast.success(`Deleted "${name}"`)
     } catch (err) {
       toast.error(`Delete failed: ${(err as Error).message}`)

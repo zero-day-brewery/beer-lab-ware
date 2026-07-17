@@ -18,7 +18,11 @@ export function makeRecipeRepo(database: BrewDB) {
       return validated
     },
     async delete(id: string): Promise<void> {
-      await database.recipes.delete(id)
+      const deletedAt = new Date().toISOString()
+      await database.transaction('rw', database.recipes, database.rowTombstones, async () => {
+        await database.recipes.delete(id)
+        await database.rowTombstones.put({ id, table: 'recipes', deletedAt })
+      })
     },
     liveList: () => database.recipes.orderBy('updatedAt').reverse().toArray(),
   }

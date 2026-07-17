@@ -20,7 +20,11 @@ export function makeBatchRepo(database: BrewDB) {
       return validated
     },
     async delete(id: string): Promise<void> {
-      await database.batches.delete(id)
+      const deletedAt = new Date().toISOString()
+      await database.transaction('rw', database.batches, database.rowTombstones, async () => {
+        await database.batches.delete(id)
+        await database.rowTombstones.put({ id, table: 'batches', deletedAt })
+      })
     },
     async getActive(): Promise<Batch | null> {
       const row = await database.batches.filter((b) => b.status === 'in-progress').first()

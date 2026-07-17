@@ -171,7 +171,7 @@ describe('sync-server GET /health', () => {
     expect(body.ok).toBe(true)
     expect(typeof body.daemonVersion).toBe('string')
     expect(body.daemonVersion.length).toBeGreaterThan(0)
-    expect(body.supportedDumpVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+    expect(body.supportedDumpVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
   })
 
   it('honors an injected daemonVersion override', async () => {

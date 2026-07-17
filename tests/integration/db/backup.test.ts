@@ -25,7 +25,7 @@ describe('backup service', () => {
 
   it('dump() returns an object with all seven tables (v3 schema)', async () => {
     const dump = await backup.dump()
-    expect(dump.version).toBe(8)
+    expect(dump.version).toBe(9)
     expect(dump.tables).toHaveProperty('recipes')
     expect(dump.tables).toHaveProperty('equipmentProfiles')
     expect(dump.tables).toHaveProperty('ingredients')
@@ -207,7 +207,7 @@ describe('backup v4 (batches/sessions/timers)', () => {
 
   it('dump() is version 6 and includes the batches table', async () => {
     const dump = await backup.dump()
-    expect(dump.version).toBe(8)
+    expect(dump.version).toBe(9)
     expect(dump.tables).toHaveProperty('batches')
     expect(dump.tables).toHaveProperty('brewSessions')
     expect(dump.tables).toHaveProperty('brewTimers')
@@ -337,7 +337,7 @@ describe('backup v5 (fermentation readings)', () => {
 
   it('dump() is version 6 and includes the readings table', async () => {
     const dump = await backup.dump()
-    expect(dump.version).toBe(8)
+    expect(dump.version).toBe(9)
     expect(dump.tables).toHaveProperty('readings')
   })
 
@@ -408,7 +408,7 @@ describe('backup v6 (stock ledger)', () => {
 
   it('dump() is version 6 and includes the stockTransactions table', async () => {
     const dump = await backup.dump()
-    expect(dump.version).toBe(8)
+    expect(dump.version).toBe(9)
     expect(dump.tables).toHaveProperty('stockTransactions')
   })
 

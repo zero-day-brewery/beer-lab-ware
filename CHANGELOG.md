@@ -20,6 +20,46 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Deletion tombstones for the sync merge (`rowTombstones`, Dexie schema v11,
+  `DumpV9`): every repo delete path (`db/repos/*.ts`) now writes a `{ id, table,
+  deletedAt }` tombstone in the SAME Dexie transaction as the delete — a
+  stock-transaction cascade delete (e.g. deleting an inventory item) tombstones
+  the cascaded ledger rows too, so they can't resurrect the item they belonged
+  to. `mergeState`/`mergeLedger` (`sync/merge.ts`) take an optional per-table
+  tombstone map and suppress any row at-or-before its tombstone's `deletedAt`;
+  a row edited/created STRICTLY AFTER `deletedAt` beats the tombstone and
+  survives (edit-after-delete, LWW-symmetric with every other timestamp
+  comparison in the merge — same wall-clock caveat). `mergeTombstones` unions
+  both sides' tombstone sets (keyed by table+id, LWW by `deletedAt`);
+  `mergeDumpTables` drops a tombstone once its row has legitimately survived
+  (superseded) and garbage-collects tombstones older than 180 days that no
+  longer match a row in either input dump (bounded growth, never GC's one
+  still needed to suppress a device that hasn't synced the deletion yet). This
+  closes the two-way-sync gate documented in `sync-client.ts`'s file header —
+  the merge no longer resurrects a row deleted on one device from another
+  device's stale, pre-delete copy; two-way sync itself is still pending
+  in-app connection UI (see README). A still-live inventory item whose ENTIRE
+  ledger history was cascade-tombstoned away by another device's delete (it
+  survived via edit-after-delete) reconciles instead of wedging: `amount ===
+  Σdeltas` is restarted from a reconciled "opening" that preserves the item's
+  own (surviving) amount, so the daemon's ledger-invariant check never
+  400s forever on it (known limitation: a device-scoped cascade only
+  tombstones the ledger rows THAT device could see — a row created on a
+  third device that never synced with the deleter can survive as an
+  untombstoned orphan and rejoin a resurrected item's sum through the normal
+  reprojection path, same as any other surviving ledger row). A full backup
+  IMPORT (`backupService.restore(dump, { bumpTimestamps: true })` — the
+  in-app "Import backup" flow) both clears the LOCAL tombstone for any row id
+  it (re)creates AND bumps each restored row's own last-write timestamp to
+  the moment of the restore, so it beats a tombstone still held by the sync
+  CANONICAL too — a restore now wins fleet-wide on the next sync, not just
+  locally until that sync silently re-deletes it again.
+  `equipmentProfiles`/`ingredients`/`brewTimers`/`waterProfiles` carry no
+  last-write timestamp field and can't win this way; the internal sync-merge
+  restore (routine syncing) never bumps timestamps — only an explicit import
+  does. New doctor check `C8` (warn, read-only, no auto-fix): flags a live
+  row that coexists with a tombstone that should have suppressed it (a merge
+  bug or a hand-edited import) and reports the total tombstone count.
 - `TERMS.md` (plain-language terms incl. safety notes for pressure calculators),
   `PRIVACY.md` (the app doesn't phone home; BYO-AI egress disclosed), `NOTICE`
   (BJCP 2021 attribution + model citations), `SECURITY.md` (private reporting +
@@ -82,6 +122,11 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
   regression in pressure math fails loudly instead of shipping.
 
 ### Changed
+- Backup envelope bumped to `DumpV9` (`DUMP_VERSION` 8→9; Dexie schema v10→v11),
+  additive only — a v10 Dexie DB and v1..v8 dumps migrate forward losslessly
+  (older dumps import with an empty tombstone set). Self-hosters: upgrade the
+  sync daemon before or together with the app — `GET /health`'s
+  `supportedDumpVersions` now advertises `[1..9]`.
 - README now states the real status of multi-device sync: the daemon and client
   library ship and are tested, the in-app connection UI is on the roadmap. The
   deploy runbook smoke-tests with `curl` instead of an app step that didn't

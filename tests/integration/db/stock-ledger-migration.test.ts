@@ -55,7 +55,7 @@ describe('v7 stock-ledger migration (opening-balance backfill)', () => {
     await seedLegacyDb([legacyItem()])
     const db = new BrewDB(DB_NAME)
     await db.open()
-    expect(db.verno).toBe(10)
+    expect(db.verno).toBe(11)
     // The legacy row survives the additive upgrade (no data loss).
     expect(await db.inventoryItems.count()).toBe(1)
     const kept = await db.inventoryItems.get('550e8400-e29b-41d4-a716-4466554400a1')
@@ -110,7 +110,7 @@ describe('v7 stock-ledger migration (opening-balance backfill)', () => {
     await seedLegacyDb([])
     const db = new BrewDB(DB_NAME)
     await db.open()
-    expect(db.verno).toBe(10)
+    expect(db.verno).toBe(11)
     expect(await db.stockTransactions.count()).toBe(0)
     db.close()
   })

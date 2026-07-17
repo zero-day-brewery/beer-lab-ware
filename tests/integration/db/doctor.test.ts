@@ -178,4 +178,65 @@ describe('runDataDoctor', () => {
     const report = await runDataDoctor(db, db.verno)
     expect(report.checks.find((c) => c.id === 'C7')?.ok).toBe(false)
   })
+
+  it('C8 passes clean (no anomalies) on a healthy DB with no tombstones', async () => {
+    const report = await runDataDoctor(db, db.verno)
+    const c8 = report.checks.find((c) => c.id === 'C8')
+    expect(c8?.ok).toBe(true)
+    expect(c8?.count).toBe(0)
+  })
+
+  it('C8 fires on a constructed bad state: a live row OLDER than its own tombstone (should have been suppressed by the sync merge — a merge bug)', async () => {
+    const id = uuid()
+    await db.recipes.add({
+      id,
+      name: 'Zombie Ale',
+      type: 'all-grain',
+      batchSize_L: 19,
+      boilTime_min: 60,
+      equipmentProfileId: B40PRO_PROFILE_ID,
+      fermentables: [],
+      hops: [],
+      yeasts: [],
+      miscs: [],
+      mashSteps: [],
+      notes_md: '',
+      createdAt: '2026-05-01T00:00:00.000Z',
+      updatedAt: '2026-05-01T00:00:00.000Z', // OLDER than the tombstone below
+      schemaVersion: 1,
+    } as never)
+    await db.rowTombstones.add({ id, table: 'recipes', deletedAt: '2026-06-01T00:00:00.000Z' })
+
+    const report = await runDataDoctor(db, db.verno)
+    const c8 = report.checks.find((c) => c.id === 'C8')
+    expect(c8?.ok).toBe(false)
+    expect(c8?.severity).toBe('warn')
+    expect(c8?.sampleIds).toContain(`recipes:${id}`)
+  })
+
+  it('C8 does NOT fire on a legitimate edit-after-delete (row newer than its tombstone — the tombstone is just not yet GC-ed)', async () => {
+    const id = uuid()
+    await db.recipes.add({
+      id,
+      name: 'Reborn Ale',
+      type: 'all-grain',
+      batchSize_L: 19,
+      boilTime_min: 60,
+      equipmentProfileId: B40PRO_PROFILE_ID,
+      fermentables: [],
+      hops: [],
+      yeasts: [],
+      miscs: [],
+      mashSteps: [],
+      notes_md: '',
+      createdAt: '2026-05-01T00:00:00.000Z',
+      updatedAt: '2026-06-05T00:00:00.000Z', // NEWER than the tombstone below
+      schemaVersion: 1,
+    } as never)
+    await db.rowTombstones.add({ id, table: 'recipes', deletedAt: '2026-06-01T00:00:00.000Z' })
+
+    const report = await runDataDoctor(db, db.verno)
+    const c8 = report.checks.find((c) => c.id === 'C8')
+    expect(c8?.ok).toBe(true)
+  })
 })

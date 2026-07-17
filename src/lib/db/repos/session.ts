@@ -19,7 +19,11 @@ export function makeSessionRepo(database: BrewDB) {
       return validated
     },
     async delete(id: string): Promise<void> {
-      await database.brewSessions.delete(id)
+      const deletedAt = new Date().toISOString()
+      await database.transaction('rw', database.brewSessions, database.rowTombstones, async () => {
+        await database.brewSessions.delete(id)
+        await database.rowTombstones.put({ id, table: 'brewSessions', deletedAt })
+      })
     },
     /** The single in-flight session. Boolean/enum where() on Dexie is unreliable — use .filter(). */
     async getActive(): Promise<BrewSession | null> {

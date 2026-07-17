@@ -4,7 +4,7 @@
  * The set of tables that sync (and therefore land in the canonical brewery.json
  * the daemon stores) is a FIXED allow-list. Secrets must never join it:
  *   - the AI-companion API key lives in localStorage `brew-companion` (a zustand
- *     persist store), NOT a Dexie table — so it's excluded from every DumpV8 dump.
+ *     persist store), NOT a Dexie table — so it's excluded from every dump.
  *   - the per-device sync token lives client-side in localStorage/appMeta, never a
  *     synced table (else it would self-propagate onto brewery.json + every device).
  *
@@ -30,6 +30,7 @@ const EXPECTED_TABLES = [
   'stockTransactions',
   'seedTombstones',
   'yeastLots',
+  'rowTombstones',
 ].sort()
 
 describe('sync surface secret-exclusion', () => {

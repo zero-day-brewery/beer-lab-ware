@@ -19,6 +19,25 @@ export interface SeedTombstone {
   id: string
 }
 
+/**
+ * Records a row's deletion for the sync merge (Track B, two-way). Every repo
+ * delete path writes one of these IN THE SAME transaction as the delete (see
+ * the repos in `db/repos/*.ts`) — `mergeState`/`mergeLedger` (sync/merge.ts)
+ * use it to stop a row deleted on one device from resurrecting via another
+ * device's stale, pre-delete copy. `table` scopes `id` (the deleted row's OWN
+ * id) so two different tables' rows never collide even though every table's
+ * ids are drawn from the same UUID pool — same single-field-primary-key
+ * convention as every other store here (`id`); `table`/`deletedAt` are plain
+ * secondary indexes. A SEPARATE concern from `SeedTombstone` above (which
+ * only suppresses the idempotent first-boot seeder) — the two mechanisms are
+ * never merged.
+ */
+export interface RowTombstone {
+  id: string
+  table: string
+  deletedAt: string // ISO
+}
+
 /** A single key/value row in the device-local appMeta store (backup record +
  *  the opaque File System Access directory handle). NEVER included in backups. */
 export interface AppMetaRow {
@@ -42,6 +61,7 @@ export class BrewDB extends Dexie {
   stockTransactions!: Table<StockTransaction, string>
   appMeta!: Table<AppMetaRow, string>
   yeastLots!: Table<YeastLot, string>
+  rowTombstones!: Table<RowTombstone, string>
 
   constructor(name = 'brew-db') {
     super(name)
@@ -120,6 +140,13 @@ export class BrewDB extends Dexie {
     // no store change — Dexie versions indexes, not object shape.
     this.version(10).stores({
       yeastLots: 'id, strain, form, productionDate, parentLotId, updatedAt',
+    })
+    // v11: deletion tombstones for the two-way sync merge (see RowTombstone
+    // above). Additive — new empty store, NO upgrade fn; versions 1–10
+    // untouched. INCLUDED in backups (DumpV9). SEPARATE from seedTombstones
+    // (v3) — do not merge the two mechanisms.
+    this.version(11).stores({
+      rowTombstones: 'id, table, deletedAt',
     })
   }
 

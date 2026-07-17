@@ -166,12 +166,12 @@ export function fixtureCollections(): BreweryCollections {
   }
 }
 
-/** A real export envelope (v8 dump) — what gets written to disk in tests. */
+/** A real export envelope (v9 dump) — what gets written to disk in tests. */
 export function fixtureEnvelope(): BreweryFile {
   return {
-    version: 8,
+    version: 9,
     exportedAt: NOW_ISO,
-    meta: { dumpVersion: 8, dbVersion: 8, rowCounts: {}, schemaVersion: 1 },
+    meta: { dumpVersion: 9, dbVersion: 9, rowCounts: {}, schemaVersion: 1 },
     tables: fixtureCollections(),
   }
 }

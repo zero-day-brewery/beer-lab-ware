@@ -26,10 +26,22 @@ export function makeTimerRepo(database: BrewDB) {
       return rows.map((r) => BrewTimerSchema.parse(r))
     },
     async delete(id: string): Promise<void> {
-      await database.brewTimers.delete(id)
+      const deletedAt = new Date().toISOString()
+      await database.transaction('rw', database.brewTimers, database.rowTombstones, async () => {
+        await database.brewTimers.delete(id)
+        await database.rowTombstones.put({ id, table: 'brewTimers', deletedAt })
+      })
     },
     async deleteBySession(sessionId: string): Promise<void> {
-      await database.brewTimers.where('sessionId').equals(sessionId).delete()
+      const deletedAt = new Date().toISOString()
+      await database.transaction('rw', database.brewTimers, database.rowTombstones, async () => {
+        const cascaded = await database.brewTimers.where('sessionId').equals(sessionId).toArray()
+        if (cascaded.length === 0) return
+        await database.brewTimers.bulkDelete(cascaded.map((t) => t.id))
+        await database.rowTombstones.bulkPut(
+          cascaded.map((t) => ({ id: t.id, table: 'brewTimers', deletedAt })),
+        )
+      })
     },
   }
 }

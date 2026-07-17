@@ -22,9 +22,19 @@ export function makeGearRepo(database: BrewDB) {
       return validated
     },
     async delete(id: string): Promise<void> {
-      await database.gearItems.delete(id)
-      // Tombstone so the seeder won't resurrect a deleted seed item on relaunch.
-      await database.seedTombstones.put({ id })
+      const deletedAt = new Date().toISOString()
+      await database.transaction(
+        'rw',
+        database.gearItems,
+        database.seedTombstones,
+        database.rowTombstones,
+        async () => {
+          await database.gearItems.delete(id)
+          // Tombstone so the seeder won't resurrect a deleted seed item on relaunch.
+          await database.seedTombstones.put({ id })
+          await database.rowTombstones.put({ id, table: 'gearItems', deletedAt })
+        },
+      )
     },
   }
 }

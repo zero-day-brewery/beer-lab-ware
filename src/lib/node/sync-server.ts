@@ -2,13 +2,13 @@
  * Track B sync daemon — the personal back-end.
  *
  * A tiny always-on HTTP service (Node built-in `http`, zero framework deps) that
- * holds the canonical brewery state as a `DumpV8` file and exposes exactly what
+ * holds the canonical brewery state as a `DumpV9` file and exposes exactly what
  * the in-app {@link HttpSyncTransport} client calls:
  *
- *   GET  /state   → 200 + the stored DumpV8 verbatim + an ETag header, or 204 (+
+ *   GET  /state   → 200 + the stored DumpV9 verbatim + an ETag header, or 204 (+
  *                   the well-known empty-sentinel ETag) when none exists yet.
  *   PUT  /state   → optimistic-concurrency write (see below) — validate + persist
- *                   the client's merged DumpV8 as the new canonical.
+ *                   the client's merged DumpV9 as the new canonical.
  *   GET  /health  → 200 + { ok, daemonVersion, supportedDumpVersions }. UNAUTHENTICATED —
  *                   for uptime monitoring; never touches or leaks brewery data.
  *
@@ -118,7 +118,7 @@ async function currentEtagOf(filePath: string): Promise<string> {
 }
 
 export interface SyncServerOptions {
-  /** Path to the canonical brewery.json (DumpV8). */
+  /** Path to the canonical brewery.json (DumpV9). */
   filePath: string
   /** sha256-hex hashes of the valid, enabled device tokens. Revoke = drop the hash. */
   tokenHashes: ReadonlySet<string>
@@ -301,7 +301,7 @@ export function createSyncHandler(opts: SyncServerOptions) {
       // The If-Match compare AND the write happen INSIDE the same mutex
       // critical section as each other (and as every other PUT) — see the file
       // header note on why checking the precondition outside this section would
-      // reopen the lost-update race. Persist the client's DumpV8 VERBATIM
+      // reopen the lost-update race. Persist the client's DumpV9 VERBATIM
       // (preserve meta/exportedAt/version), atomically; a concurrent GET never
       // reads a torn file. The prior generation is snapshotted to a `.bak` FIRST
       // (no-op on the very first PUT or when generations are disabled) — this

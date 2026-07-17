@@ -1,10 +1,10 @@
 /**
- * Node brewery-store — DumpV8 migration + ledger-invariant guard + PUT
+ * Node brewery-store — DumpV9 migration + ledger-invariant guard + PUT
  * generation rotation.
  *
  * Covers the Track B back-end requirements: the file store round-trips a real
- * client DumpV8 (incl. the new `yeastLots` + `seedTombstones` tables + `meta`),
- * still reads older v1..v6 dumps (newer tables → empty), the exported
+ * client DumpV9 (incl. the `yeastLots` + `seedTombstones` + `rowTombstones`
+ * tables + `meta`), still reads older v1..v6 dumps (newer tables → empty), the exported
  * `assertLedgerInvariant` rejects a dump whose cached `amount` diverges from its
  * ledger (`amount === Σ deltas`), and `rotateGenerations` snapshots + prunes the
  * `.bak` history the sync daemon keeps before each PUT overwrite.
@@ -48,28 +48,35 @@ const yeastLot: YeastLot = {
   schemaVersion: 1,
 }
 
-describe('brewery-store DumpV8', () => {
-  it('writes the current v8 envelope with a meta sidecar', async () => {
+describe('brewery-store DumpV9', () => {
+  it('writes the current v9 envelope with a meta sidecar', async () => {
     const file = await tmpFile()
     await saveBrewery(file, emptyCollections(), '2026-07-09T00:00:00.000Z')
     const raw = JSON.parse(await readFile(file, 'utf8'))
     expect(raw.version).toBe(CURRENT_DUMP_VERSION)
-    expect(raw.version).toBe(8)
-    expect(raw.meta).toMatchObject({ dumpVersion: 8, schemaVersion: 1 })
+    expect(raw.version).toBe(9)
+    expect(raw.meta).toMatchObject({ dumpVersion: 9, schemaVersion: 1 })
     expect(raw.tables.yeastLots).toEqual([])
     expect(raw.tables.seedTombstones).toEqual([])
+    expect(raw.tables.rowTombstones).toEqual([])
   })
 
-  it('round-trips a client DumpV8 including yeastLots + seedTombstones', async () => {
+  it('round-trips a client DumpV9 including yeastLots + seedTombstones + rowTombstones', async () => {
     const file = await tmpFile()
     const c = fixtureCollections()
     c.seedTombstones = [{ id: 'seed-recipe-1' }]
     c.yeastLots = [yeastLot]
+    c.rowTombstones = [
+      { id: 'deleted-recipe-1', table: 'recipes', deletedAt: '2026-06-01T00:00:00.000Z' },
+    ]
     await saveBrewery(file, c)
     const back = await loadBrewery(file)
     expect(back.seedTombstones).toEqual([{ id: 'seed-recipe-1' }])
     expect(back.yeastLots).toHaveLength(1)
     expect(back.yeastLots[0].strain).toBe('California Ale')
+    expect(back.rowTombstones).toEqual([
+      { id: 'deleted-recipe-1', table: 'recipes', deletedAt: '2026-06-01T00:00:00.000Z' },
+    ])
     expect(back.recipes).toHaveLength(c.recipes.length)
   })
 
@@ -83,15 +90,16 @@ describe('brewery-store DumpV8', () => {
     const c = await loadBrewery(file)
     expect(c.yeastLots).toEqual([])
     expect(c.seedTombstones).toEqual([])
+    expect(c.rowTombstones).toEqual([])
     expect(c.recipes).toEqual([])
   })
 
   it('rejects an unsupported (too-new) version', () => {
-    expect(() => parseEnvelope({ version: 9, tables: {} })).toThrow(/Unsupported/)
+    expect(() => parseEnvelope({ version: 10, tables: {} })).toThrow(/Unsupported/)
   })
 
   it('exports SUPPORTED_VERSIONS matching the versions parseEnvelope accepts', () => {
-    expect(SUPPORTED_VERSIONS).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+    expect(SUPPORTED_VERSIONS).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
     for (const v of SUPPORTED_VERSIONS) {
       expect(() => parseEnvelope({ version: v, tables: {} })).not.toThrow()
     }
@@ -99,6 +107,18 @@ describe('brewery-store DumpV8', () => {
 
   it('validates a malformed v8 meta sidecar', () => {
     expect(() => parseEnvelope({ version: 8, meta: { dumpVersion: 'nope' }, tables: {} })).toThrow()
+  })
+
+  // Adversarial-review hardening: a corrupt `deletedAt` must be REJECTED at
+  // the Zod boundary, not silently accepted (fails open — never suppresses,
+  // never GCs, see sync/merge.ts + sync-client.ts).
+  it('rejects a rowTombstone whose deletedAt does not parse to a finite timestamp', () => {
+    expect(() =>
+      parseEnvelope({
+        version: 9,
+        tables: { rowTombstones: [{ id: 'x', table: 'recipes', deletedAt: 'not-a-date' }] },
+      }),
+    ).toThrow()
   })
 
   describe('assertLedgerInvariant', () => {

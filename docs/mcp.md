@@ -26,7 +26,7 @@ water, stock ledger). The MCP server reads it on startup and writes approved
 changes back to it.
 
 > The server reads any older export version and always writes the **current**
-> envelope (v8 at the time of writing — the authoritative value is
+> envelope (v9 at the time of writing — the authoritative value is
 > `CURRENT_DUMP_VERSION` in `src/lib/node/brewery-store.ts`).
 
 ## 2. Point your MCP client at the server

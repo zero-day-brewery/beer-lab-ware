@@ -8,7 +8,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import type { InventoryItem } from '@/lib/brewing/types/inventory'
-import type { DumpV8 } from '@/lib/db/backup'
+import type { DumpV9 } from '@/lib/db/backup'
 import { makeBackupService } from '@/lib/db/backup'
 import { runDataDoctor } from '@/lib/db/doctor'
 import { makeStockTransactionsRepo } from '@/lib/db/repos/stock-transactions'
@@ -50,8 +50,8 @@ async function sumDeltas(db: BrewDB, itemId: string): Promise<number> {
   return txns.reduce((s, t) => s + t.delta, 0)
 }
 
-function emptyTables(): DumpV8['tables'] {
-  return emptyCollections() as unknown as DumpV8['tables']
+function emptyTables(): DumpV9['tables'] {
+  return emptyCollections() as unknown as DumpV9['tables']
 }
 
 describe('sync reconciles a concurrent double-deduct instead of wedging forever', () => {

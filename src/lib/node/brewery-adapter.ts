@@ -64,6 +64,7 @@ function cloneCollections(d: BreweryCollections): BreweryCollections {
     stockTransactions: [...d.stockTransactions],
     seedTombstones: [...d.seedTombstones],
     yeastLots: [...d.yeastLots],
+    rowTombstones: [...d.rowTombstones],
   }
 }
 

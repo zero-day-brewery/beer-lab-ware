@@ -1,7 +1,7 @@
 import { DUMP_VERSION, type Dump } from '@/lib/db/backup'
 
 const SUPPORTED_MIN = 1
-const SUPPORTED_MAX = DUMP_VERSION // == 7 today; auto-tracks a future DumpV8
+const SUPPORTED_MAX = DUMP_VERSION // == 9 today; auto-tracks a future DumpV10
 
 export type GuardResult =
   | { ok: true; dump: Dump; summary: Record<string, number> }

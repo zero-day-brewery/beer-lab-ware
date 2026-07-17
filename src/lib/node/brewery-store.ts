@@ -2,16 +2,16 @@
  * Terminal/MCP Stage A — the file-backed brewery STORE (pure Node, no browser).
  *
  * This module loads + persists the app's EXPORTED brewery JSON (the same envelope
- * the in-app "Export backup (JSON)" button produces — a `DumpV8` from
+ * the in-app "Export backup (JSON)" button produces — a `DumpV9` from
  * `src/lib/db/backup.ts`) using only Node `fs` + the existing Zod schemas. It is
  * the file substrate under which the Node `ToolDeps` / `ActionWriteDeps` run, so
  * the browser app's tool registry + `applyAction` can execute OUTSIDE the browser.
  * It is ALSO the canonical store the Track B sync daemon wraps (GET/PUT /state).
  *
  * Design contract (mirrors `backup.ts`):
- *   - Envelope: `{ version: 1..8, exportedAt, meta?, tables: {...} }`. We READ any
- *     v1..v8 dump (older dumps simply lack the newer tables → empty collections)
- *     and we always WRITE the current v8 envelope (+ a regenerated `meta` sidecar).
+ *   - Envelope: `{ version: 1..9, exportedAt, meta?, tables: {...} }`. We READ any
+ *     v1..v9 dump (older dumps simply lack the newer tables → empty collections)
+ *     and we always WRITE the current v9 envelope (+ a regenerated `meta` sidecar).
  *   - Zod-validate EVERY row on load AND on save (CLAUDE.md "parse on read AND write").
  *   - Atomic writes: serialize → write a temp file in the target's dir → `rename`
  *     over the target. A failed/partial write can never corrupt the existing file.
@@ -62,8 +62,30 @@ interface SeedTombstone {
 }
 const SeedTombstoneSchema = z.object({ id: z.string() })
 
-/** The current export envelope version we write. Matches `DumpV8` in backup.ts. */
-export const CURRENT_DUMP_VERSION = 8 as const
+/**
+ * Deletion tombstone for the sync merge (mirrors `RowTombstone` in
+ * db/schema.ts / backup.ts — a three-field row, no standalone types module
+ * needed here either).
+ */
+interface RowTombstone {
+  id: string
+  table: string
+  deletedAt: string
+}
+// `deletedAt` is checked to PARSE to a finite timestamp — a corrupt value
+// would otherwise fail open (`Date.parse` → `NaN` → every comparison against
+// it is false, so it would never suppress a row and never GC — see
+// sync/merge.ts + sync-client.ts). Same hardening as backup.ts's schema.
+const RowTombstoneSchema = z.object({
+  id: z.string(),
+  table: z.string(),
+  deletedAt: z.string().refine((s) => Number.isFinite(Date.parse(s)), {
+    message: 'deletedAt must be a parseable timestamp',
+  }),
+})
+
+/** The current export envelope version we write. Matches `DumpV9` in backup.ts. */
+export const CURRENT_DUMP_VERSION = 9 as const
 
 /** The in-memory brewery — one array per exported table, all Zod-validated. */
 export interface BreweryCollections {
@@ -81,9 +103,10 @@ export interface BreweryCollections {
   stockTransactions: StockTransaction[]
   seedTombstones: SeedTombstone[]
   yeastLots: YeastLot[]
+  rowTombstones: RowTombstone[]
 }
 
-/** The on-disk file shape we WRITE (a v8 dump — same envelope as the app). */
+/** The on-disk file shape we WRITE (a v9 dump — same envelope as the app). */
 export interface BreweryFile {
   version: typeof CURRENT_DUMP_VERSION
   exportedAt: string
@@ -92,7 +115,7 @@ export interface BreweryFile {
 }
 
 /** Envelope versions this store can read. Also reported by `GET /health`. */
-export const SUPPORTED_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8] as const
+export const SUPPORTED_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const
 
 /** A fresh, empty set of collections (all tables present, all empty). */
 export function emptyCollections(): BreweryCollections {
@@ -111,6 +134,7 @@ export function emptyCollections(): BreweryCollections {
     stockTransactions: [],
     seedTombstones: [],
     yeastLots: [],
+    rowTombstones: [],
   }
 }
 
@@ -143,6 +167,7 @@ export function validateCollections(tables: RawTables): BreweryCollections {
     stockTransactions: parseAll(tables.stockTransactions, (r) => StockTransactionSchema.parse(r)),
     seedTombstones: parseAll(tables.seedTombstones, (r) => SeedTombstoneSchema.parse(r)),
     yeastLots: parseAll(tables.yeastLots, (r) => YeastLotSchema.parse(r)),
+    rowTombstones: parseAll(tables.rowTombstones, (r) => RowTombstoneSchema.parse(r)),
   }
 }
 
@@ -322,7 +347,7 @@ export async function loadBrewery(filePath: string): Promise<BreweryCollections>
 }
 
 /**
- * Serialize collections back into the v6 export envelope and write it atomically.
+ * Serialize collections back into the current export envelope and write it atomically.
  * Re-validates every row before writing (parse-on-write), so a save can never
  * persist a malformed row; combined with the temp+rename it never corrupts the
  * existing file on failure.
