@@ -358,9 +358,21 @@ export function verifyBearer(
   tokenHashes: ReadonlySet<string>,
 ): boolean {
   if (!header) return false
-  const m = /^Bearer\s+(.+)$/i.exec(header.trim())
-  if (!m) return false
-  const presented = Buffer.from(sha256Hex(m[1]), 'hex')
+  // Parse "Bearer <token>" WITHOUT a backtracking-prone regex. This header is
+  // attacker-controlled and reaches here BEFORE auth succeeds, so the split
+  // must be linear-time: the old `/^Bearer\s+(.+)$/` let `\s+` and `.+`
+  // partition a run of whitespace ambiguously (CodeQL js/polynomial-redos —
+  // a header like `Bearer` + many `  ` could drive O(n^2) backtracking).
+  // Scheme = text up to the first whitespace; token = the rest, leading
+  // whitespace stripped. Behavior-identical to the old regex for every real
+  // header (trailing whitespace is already gone via trim()).
+  const trimmed = header.trim()
+  const firstSpace = trimmed.search(/\s/)
+  if (firstSpace === -1) return false
+  if (trimmed.slice(0, firstSpace).toLowerCase() !== 'bearer') return false
+  const token = trimmed.slice(firstSpace + 1).trimStart()
+  if (!token) return false
+  const presented = Buffer.from(sha256Hex(token), 'hex')
   let ok = false
   for (const h of tokenHashes) {
     const known = Buffer.from(h, 'hex')

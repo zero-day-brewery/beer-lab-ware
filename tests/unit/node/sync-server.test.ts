@@ -29,6 +29,7 @@ import {
   parseAllowedOrigins,
   parseIngestTokenHashes,
   sha256Hex,
+  verifyBearer,
 } from '@/lib/node/sync-server'
 import { EMPTY_ETAG_SENTINEL } from '@/lib/sync/etag'
 import { BATCH_ID, fixtureCollections } from '../../fixtures/node/brewery-fixture'
@@ -1481,5 +1482,37 @@ describe('parseIngestTokenHashes (SYNC_INGEST_TOKEN_HASHES)', () => {
   it('set but containing no valid sha256-hex hash → throws (refuse to start, never silently lock the bridge out)', () => {
     expect(() => parseIngestTokenHashes('nothex')).toThrow(/sha256-hex/i)
     expect(() => parseIngestTokenHashes('deadbeef')).toThrow(/sha256-hex/i) // right alphabet, wrong length
+  })
+})
+
+describe('verifyBearer — token parse (linear-time, ReDoS-safe)', () => {
+  const tok = 'a'.repeat(64)
+  const hashes = new Set([sha256Hex(tok)])
+
+  it('accepts a valid Bearer token (any scheme casing, extra internal whitespace)', () => {
+    expect(verifyBearer(`Bearer ${tok}`, hashes)).toBe(true)
+    expect(verifyBearer(`bearer ${tok}`, hashes)).toBe(true)
+    expect(verifyBearer(`BEARER   ${tok}`, hashes)).toBe(true)
+    expect(verifyBearer(`  Bearer ${tok}  `, hashes)).toBe(true) // surrounding ws trimmed
+    expect(verifyBearer(`Bearer\t${tok}`, hashes)).toBe(true)
+  })
+
+  it('rejects a missing/malformed/wrong-scheme/empty-token header', () => {
+    expect(verifyBearer(undefined, hashes)).toBe(false)
+    expect(verifyBearer('', hashes)).toBe(false)
+    expect(verifyBearer('Bearer', hashes)).toBe(false) // no token
+    expect(verifyBearer('Bearer   ', hashes)).toBe(false) // whitespace-only token
+    expect(verifyBearer(`Basic ${tok}`, hashes)).toBe(false) // wrong scheme
+    expect(verifyBearer(tok, hashes)).toBe(false) // no scheme
+    expect(verifyBearer(`Bearer ${'b'.repeat(64)}`, hashes)).toBe(false) // wrong token
+  })
+
+  it('does not backtrack on a hostile whitespace-heavy header (completes in well under a second)', () => {
+    // The old /^Bearer\s+(.+)$/ could partition a whitespace run ambiguously —
+    // O(n^2). This shape is exactly the CodeQL js/polynomial-redos trigger.
+    const hostile = `Bearer${' '.repeat(200_000)}`
+    const start = performance.now()
+    expect(verifyBearer(hostile, hashes)).toBe(false)
+    expect(performance.now() - start).toBeLessThan(200)
   })
 })
