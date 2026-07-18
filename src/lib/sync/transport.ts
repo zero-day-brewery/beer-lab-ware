@@ -1,7 +1,7 @@
 /**
  * Sync transport — how a device push/pulls the canonical brewery state.
  *
- * The payload IS the existing DumpV9 backup envelope (reuse, don't reinvent):
+ * The payload IS the existing DumpV10 backup envelope (reuse, don't reinvent):
  * the sync service just stores the latest merged dump and hands it back. Two
  * implementations:
  *  - {@link InMemorySyncTransport} — a fake for tests + a local dev double.
@@ -31,11 +31,11 @@
  *    branch on programmatically — see `sync-client.ts`.
  */
 
-import type { DumpV9 } from '@/lib/db/backup'
+import type { DumpV10 } from '@/lib/db/backup'
 import { EMPTY_ETAG_SENTINEL } from '@/lib/sync/etag'
 
-/** The wire payload — the DumpV9 backup envelope. */
-export type SyncPayload = DumpV9
+/** The wire payload — the DumpV10 backup envelope. */
+export type SyncPayload = DumpV10
 
 /**
  * Thrown by `HttpSyncTransport` when the daemon answers a pull/push with a

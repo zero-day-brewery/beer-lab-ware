@@ -9,7 +9,7 @@
  *    on the immutable txn id — never LWW. See {@link mergeLedger}.
  *
  * These operate on plain rows; `sync-client.ts` applies them across a whole
- * DumpV9 envelope and writes the result through the tested `backupService`.
+ * DumpV10 envelope and writes the result through the tested `backupService`.
  * A THIRD kind of merge, deletion tombstones, closes the resurrection gap the
  * first two leave open on their own: see {@link mergeTombstones} and the
  * `tombstones` param on `mergeState`/`mergeLedger` below.

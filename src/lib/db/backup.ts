@@ -7,6 +7,8 @@ import {
 } from '@/lib/brewing/types/backup-meta'
 import type { Batch } from '@/lib/brewing/types/batch'
 import { BatchSchema } from '@/lib/brewing/types/batch'
+import type { DeviceLink } from '@/lib/brewing/types/device-link'
+import { DeviceLinkSchema } from '@/lib/brewing/types/device-link'
 import type { EquipmentProfile } from '@/lib/brewing/types/equipment'
 import { EquipmentProfileSchema } from '@/lib/brewing/types/equipment'
 import type { GearItem } from '@/lib/brewing/types/gear'
@@ -82,8 +84,6 @@ export interface DumpV6 {
   tables: DumpV5['tables'] & { stockTransactions: StockTransaction[] }
 }
 
-export const DUMP_VERSION = 9 as const // single source; E2 import-guard imports THIS
-
 // seedTombstones is a trivial device-internal row; validated here (Zod on read)
 // so a corrupt/hand-edited backup throws BEFORE any clear() — same guarantee the
 // other tables get. No standalone types module needed for a one-field row.
@@ -127,11 +127,35 @@ export interface DumpV9 {
   tables: DumpV8['tables'] & { rowTombstones: RowTombstone[] }
 }
 
-export type Dump = DumpV1 | DumpV2 | DumpV3 | DumpV4 | DumpV5 | DumpV6 | DumpV7 | DumpV8 | DumpV9
+// deviceLinks only exists in v10 dumps — sensor-device → batch assignments
+// (see db/schema.ts v12 + brewing/types/device-link.ts). Same additive-table
+// pattern as every prior bump: a SEPARATE, standalone type module (not an
+// inline schema here) because DeviceLink is also referenced client-side by
+// the repo/UI, unlike the trivial Seed/RowTombstone rows above.
+export interface DumpV10 {
+  version: 10
+  exportedAt: string
+  meta: BackupFileMeta
+  tables: DumpV9['tables'] & { deviceLinks: DeviceLink[] }
+}
+
+export type Dump =
+  | DumpV1
+  | DumpV2
+  | DumpV3
+  | DumpV4
+  | DumpV5
+  | DumpV6
+  | DumpV7
+  | DumpV8
+  | DumpV9
+  | DumpV10
+
+export const DUMP_VERSION = 10 as const // single source; E2 import-guard imports THIS
 
 export function makeBackupService(database: BrewDB) {
   return {
-    async dump(): Promise<DumpV9> {
+    async dump(): Promise<DumpV10> {
       const [
         recipes,
         equipmentProfiles,
@@ -148,6 +172,7 @@ export function makeBackupService(database: BrewDB) {
         seedTombstones,
         yeastLots,
         rowTombstones,
+        deviceLinks,
       ] = await Promise.all([
         database.recipes.toArray(),
         database.equipmentProfiles.toArray(),
@@ -164,6 +189,7 @@ export function makeBackupService(database: BrewDB) {
         database.seedTombstones.toArray(),
         database.yeastLots.toArray(),
         database.rowTombstones.toArray(),
+        database.deviceLinks.toArray(),
       ])
       const tables = {
         recipes,
@@ -181,6 +207,7 @@ export function makeBackupService(database: BrewDB) {
         seedTombstones,
         yeastLots,
         rowTombstones,
+        deviceLinks,
       }
       const rowCounts: Record<string, number> = Object.fromEntries(
         Object.entries(tables).map(([name, rows]) => [name, rows.length] as const),
@@ -191,7 +218,7 @@ export function makeBackupService(database: BrewDB) {
         rowCounts,
         schemaVersion: BACKUP_META_SCHEMA_VERSION,
       })
-      return { version: 9, exportedAt: new Date().toISOString(), meta, tables }
+      return { version: 10, exportedAt: new Date().toISOString(), meta, tables }
     },
 
     async restore(
@@ -214,7 +241,7 @@ export function makeBackupService(database: BrewDB) {
       } = {},
     ): Promise<void> {
       // Validate the envelope shape before touching anything.
-      if (!d || typeof d !== 'object' || ![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(d.version)) {
+      if (!d || typeof d !== 'object' || ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(d.version)) {
         throw new Error(`Unsupported dump version: ${(d as { version?: number })?.version}`)
       }
       const t = d.tables
@@ -243,7 +270,8 @@ export function makeBackupService(database: BrewDB) {
         d.version === 6 ||
         d.version === 7 ||
         d.version === 8 ||
-        d.version === 9
+        d.version === 9 ||
+        d.version === 10
       const inventoryItems = hasPhase2
         ? d.tables.inventoryItems.map((r) => InventoryItemSchema.parse(r))
         : null
@@ -256,7 +284,8 @@ export function makeBackupService(database: BrewDB) {
         d.version === 6 ||
         d.version === 7 ||
         d.version === 8 ||
-        d.version === 9
+        d.version === 9 ||
+        d.version === 10
       const waterProfiles = hasWater
         ? (d as DumpV3).tables.waterProfiles.map((r) => WaterSchema.parse(r))
         : null
@@ -267,7 +296,8 @@ export function makeBackupService(database: BrewDB) {
         d.version === 6 ||
         d.version === 7 ||
         d.version === 8 ||
-        d.version === 9
+        d.version === 9 ||
+        d.version === 10
       const batches = hasV4 ? (d as DumpV4).tables.batches.map((r) => BatchSchema.parse(r)) : null
       const brewSessions = hasV4
         ? (d as DumpV4).tables.brewSessions.map((r) => BrewSessionSchema.parse(r))
@@ -277,7 +307,12 @@ export function makeBackupService(database: BrewDB) {
         : null
       // readings exist in v5+ dumps; older dumps leave the table untouched.
       const hasV5 =
-        d.version === 5 || d.version === 6 || d.version === 7 || d.version === 8 || d.version === 9
+        d.version === 5 ||
+        d.version === 6 ||
+        d.version === 7 ||
+        d.version === 8 ||
+        d.version === 9 ||
+        d.version === 10
       const readings = hasV5
         ? (d as DumpV5).tables.readings.map((r) => ReadingSchema.parse(r))
         : null
@@ -286,14 +321,15 @@ export function makeBackupService(database: BrewDB) {
       // dump round-trips its txns; an older (pre-ledger) dump restores an EMPTY
       // ledger rather than leaving stale rows that would reference the now-replaced
       // inventory. Never null → always in writeTables so it always gets cleared.
-      const hasV6 = d.version === 6 || d.version === 7 || d.version === 8 || d.version === 9
+      const hasV6 =
+        d.version === 6 || d.version === 7 || d.version === 8 || d.version === 9 || d.version === 10
       const stockTransactions: StockTransaction[] = hasV6
         ? (d as DumpV6).tables.stockTransactions.map((r) => StockTransactionSchema.parse(r))
         : []
 
       // seedTombstones exist in v7+ dumps. Follows the readings (hasV5) NULL
       // pattern: cleared+rewritten on a v7+ dump, left UNTOUCHED on older dumps.
-      const hasV7 = d.version === 7 || d.version === 8 || d.version === 9
+      const hasV7 = d.version === 7 || d.version === 8 || d.version === 9 || d.version === 10
       const seedTombstones = hasV7
         ? (d as DumpV7).tables.seedTombstones.map((r) => SeedTombstoneSchema.parse(r))
         : null
@@ -301,7 +337,7 @@ export function makeBackupService(database: BrewDB) {
       // yeastLots exist in v8+ dumps. Same readings NULL pattern: cleared+
       // rewritten on a v8+ dump, left UNTOUCHED on older dumps (lots are standalone,
       // so an older restore need not wipe them).
-      const hasV8 = d.version === 8 || d.version === 9
+      const hasV8 = d.version === 8 || d.version === 9 || d.version === 10
       const yeastLots = hasV8
         ? (d as DumpV8).tables.yeastLots.map((r) => YeastLotSchema.parse(r))
         : null
@@ -336,16 +372,29 @@ export function makeBackupService(database: BrewDB) {
       // tombstone post-restore, `reprojectAmounts`'s zero-surviving-txns branch
       // (sync-client.ts) self-heals it with a compensating `sync-reconcile`
       // transaction that preserves the (now-winning) item's restored `amount`.
-      const hasV9 = d.version === 9
+      const hasV9 = d.version === 9 || d.version === 10
       const rowTombstones = hasV9
         ? (d as DumpV9).tables.rowTombstones.map((r) => RowTombstoneSchema.parse(r))
         : null
 
+      // deviceLinks only exist in v10 dumps. Same readings/yeastLots NULL
+      // pattern: cleared+rewritten on a v10 dump, left UNTOUCHED on older dumps
+      // (links are standalone rows, same reasoning as yeastLots above — an
+      // older restore need not wipe them). Carries a real `updatedAt`
+      // last-write cursor, so it's eligible for the `bumpTimestamps` treatment
+      // below (a restored link should out-vote a stale synced tombstone, same
+      // as recipes/inventoryItems/etc.).
+      const hasV10 = d.version === 10
+      const deviceLinks = hasV10
+        ? (d as DumpV10).tables.deviceLinks.map((r) => DeviceLinkSchema.parse(r))
+        : null
+
       // Bump ONLY on a genuine import (see the `bumpTimestamps` doc above) —
-      // recipes/inventoryItems/gearItems/batches/brewSessions/yeastLots carry a
-      // real `updatedAt` LAST-WRITE cursor (safe to bump); everything else is
-      // either timestamp-less or domain/historical data (see above) and is left
-      // untouched. Mutates the freshly-parsed (not caller-owned) arrays in place.
+      // recipes/inventoryItems/gearItems/batches/brewSessions/yeastLots/
+      // deviceLinks carry a real `updatedAt` LAST-WRITE cursor (safe to bump);
+      // everything else is either timestamp-less or domain/historical data
+      // (see above) and is left untouched. Mutates the freshly-parsed (not
+      // caller-owned) arrays in place.
       if (opts.bumpTimestamps) {
         const restoredAt = opts.now ?? new Date().toISOString()
         for (const r of recipes) r.updatedAt = restoredAt
@@ -354,6 +403,7 @@ export function makeBackupService(database: BrewDB) {
         if (batches) for (const r of batches) r.updatedAt = restoredAt
         if (brewSessions) for (const r of brewSessions) r.updatedAt = restoredAt
         if (yeastLots) for (const r of yeastLots) r.updatedAt = restoredAt
+        if (deviceLinks) for (const r of deviceLinks) r.updatedAt = restoredAt
       }
 
       const v1Tables = [
@@ -371,6 +421,7 @@ export function makeBackupService(database: BrewDB) {
         ...(seedTombstones !== null ? [database.seedTombstones] : []),
         ...(yeastLots !== null ? [database.yeastLots] : []),
         ...(rowTombstones !== null ? [database.rowTombstones] : []),
+        ...(deviceLinks !== null ? [database.deviceLinks] : []),
         // Always cleared/rewritten — a restore replaces all data, so the ledger
         // is reset (to the dump's txns, or empty for a pre-v6 dump).
         database.stockTransactions,
@@ -408,6 +459,7 @@ export function makeBackupService(database: BrewDB) {
           ...(seedTombstones !== null ? [database.seedTombstones.bulkPut(seedTombstones)] : []),
           ...(yeastLots !== null ? [database.yeastLots.bulkPut(yeastLots)] : []),
           ...(rowTombstones !== null ? [database.rowTombstones.bulkPut(rowTombstones)] : []),
+          ...(deviceLinks !== null ? [database.deviceLinks.bulkPut(deviceLinks)] : []),
           database.stockTransactions.bulkPut(stockTransactions),
         ])
 
@@ -429,6 +481,7 @@ export function makeBackupService(database: BrewDB) {
           ...(readings ?? []),
           ...stockTransactions,
           ...(yeastLots ?? []),
+          ...(deviceLinks ?? []),
         ].map((r) => r.id)
         if (restoredIds.length > 0) {
           await database.rowTombstones.bulkDelete(restoredIds)
@@ -453,6 +506,7 @@ export function makeBackupService(database: BrewDB) {
         database.stockTransactions,
         database.yeastLots,
         database.rowTombstones,
+        database.deviceLinks,
       ]
       await database.transaction('rw', allTables, async () => {
         await Promise.all(allTables.map((t) => t.clear()))

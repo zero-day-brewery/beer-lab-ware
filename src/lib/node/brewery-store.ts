@@ -2,16 +2,20 @@
  * Terminal/MCP Stage A — the file-backed brewery STORE (pure Node, no browser).
  *
  * This module loads + persists the app's EXPORTED brewery JSON (the same envelope
- * the in-app "Export backup (JSON)" button produces — a `DumpV9` from
+ * the in-app "Export backup (JSON)" button produces — a `DumpV10` from
  * `src/lib/db/backup.ts`) using only Node `fs` + the existing Zod schemas. It is
  * the file substrate under which the Node `ToolDeps` / `ActionWriteDeps` run, so
  * the browser app's tool registry + `applyAction` can execute OUTSIDE the browser.
  * It is ALSO the canonical store the Track B sync daemon wraps (GET/PUT /state).
  *
  * Design contract (mirrors `backup.ts`):
- *   - Envelope: `{ version: 1..9, exportedAt, meta?, tables: {...} }`. We READ any
- *     v1..v9 dump (older dumps simply lack the newer tables → empty collections)
- *     and we always WRITE the current v9 envelope (+ a regenerated `meta` sidecar).
+ *   - Envelope: `{ version: 1..10, exportedAt, meta?, tables: {...} }`. We READ any
+ *     v1..v10 dump (older dumps simply lack the newer tables → empty collections)
+ *     and we always WRITE the current v10 envelope (+ a regenerated `meta` sidecar)
+ *     via `saveBrewery` — the ONE exception is the sync daemon's `POST /readings`
+ *     (`sync-server.ts`), which deliberately bypasses `saveBrewery` for a SURGICAL
+ *     raw-JSON write that never bumps a stored file's version (see that module's
+ *     header for why).
  *   - Zod-validate EVERY row on load AND on save (CLAUDE.md "parse on read AND write").
  *   - Atomic writes: serialize → write a temp file in the target's dir → `rename`
  *     over the target. A failed/partial write can never corrupt the existing file.
@@ -31,6 +35,8 @@ import {
 } from '@/lib/brewing/types/backup-meta'
 import type { Batch } from '@/lib/brewing/types/batch'
 import { BatchSchema } from '@/lib/brewing/types/batch'
+import type { DeviceLink } from '@/lib/brewing/types/device-link'
+import { DeviceLinkSchema } from '@/lib/brewing/types/device-link'
 import type { EquipmentProfile } from '@/lib/brewing/types/equipment'
 import { EquipmentProfileSchema } from '@/lib/brewing/types/equipment'
 import type { GearItem } from '@/lib/brewing/types/gear'
@@ -84,8 +90,8 @@ const RowTombstoneSchema = z.object({
   }),
 })
 
-/** The current export envelope version we write. Matches `DumpV9` in backup.ts. */
-export const CURRENT_DUMP_VERSION = 9 as const
+/** The current export envelope version we write. Matches `DumpV10` in backup.ts. */
+export const CURRENT_DUMP_VERSION = 10 as const
 
 /** The in-memory brewery — one array per exported table, all Zod-validated. */
 export interface BreweryCollections {
@@ -104,9 +110,10 @@ export interface BreweryCollections {
   seedTombstones: SeedTombstone[]
   yeastLots: YeastLot[]
   rowTombstones: RowTombstone[]
+  deviceLinks: DeviceLink[]
 }
 
-/** The on-disk file shape we WRITE (a v9 dump — same envelope as the app). */
+/** The on-disk file shape we WRITE (a v10 dump — same envelope as the app). */
 export interface BreweryFile {
   version: typeof CURRENT_DUMP_VERSION
   exportedAt: string
@@ -115,7 +122,7 @@ export interface BreweryFile {
 }
 
 /** Envelope versions this store can read. Also reported by `GET /health`. */
-export const SUPPORTED_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const
+export const SUPPORTED_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const
 
 /** A fresh, empty set of collections (all tables present, all empty). */
 export function emptyCollections(): BreweryCollections {
@@ -135,6 +142,7 @@ export function emptyCollections(): BreweryCollections {
     seedTombstones: [],
     yeastLots: [],
     rowTombstones: [],
+    deviceLinks: [],
   }
 }
 
@@ -168,6 +176,7 @@ export function validateCollections(tables: RawTables): BreweryCollections {
     seedTombstones: parseAll(tables.seedTombstones, (r) => SeedTombstoneSchema.parse(r)),
     yeastLots: parseAll(tables.yeastLots, (r) => YeastLotSchema.parse(r)),
     rowTombstones: parseAll(tables.rowTombstones, (r) => RowTombstoneSchema.parse(r)),
+    deviceLinks: parseAll(tables.deviceLinks, (r) => DeviceLinkSchema.parse(r)),
   }
 }
 

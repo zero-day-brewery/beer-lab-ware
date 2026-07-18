@@ -4,23 +4,34 @@
  *
  * Drives a real http.Server on an ephemeral 127.0.0.1 port with fetch, matching
  * what the in-app HttpSyncTransport does. Confirms: mandatory Bearer auth on both
- * /state methods; 204-when-empty / 200-with-verbatim-body round-trip (meta
- * preserved); 400 on bad JSON / bad envelope / ledger violation; 404 off-route;
- * /health is tokenless and never leaks brewery data; PUT snapshots the prior
- * generation to a `.bak` and prunes to SYNC_KEEP_GENERATIONS; a 401 logs one
- * token-free stderr-style line.
+ * /state methods; ingest-scoped tokens (SYNC_INGEST_TOKEN_HASHES) work ONLY on
+ * POST /readings and 401 on /state indistinguishably from a bad token;
+ * 204-when-empty / 200-with-verbatim-body round-trip (meta preserved); 400 on
+ * bad JSON / bad envelope / ledger violation; 404 off-route; /health is
+ * tokenless and never leaks brewery data; PUT snapshots the prior generation to
+ * a `.bak` and prunes to SYNC_KEEP_GENERATIONS while an ingest append never
+ * rotates; a 401 logs one token-free stderr-style line whose remote= is the
+ * socket peer (X-Forwarded-For only as a labeled untrusted extra); the ingest
+ * rate limit holds under true same-device concurrency (in-mutex re-check), the
+ * write mutex serializes distinct-device ingests, form-encoded Tilt bodies are
+ * accepted, and /readings enforces its own 256 KB body cap.
  */
 
 import { createHash } from 'node:crypto'
-import { mkdtemp, readdir, readFile } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createSyncServer, parseAllowedOrigins, sha256Hex } from '@/lib/node/sync-server'
+import {
+  createSyncServer,
+  parseAllowedOrigins,
+  parseIngestTokenHashes,
+  sha256Hex,
+} from '@/lib/node/sync-server'
 import { EMPTY_ETAG_SENTINEL } from '@/lib/sync/etag'
-import { fixtureCollections } from '../../fixtures/node/brewery-fixture'
+import { BATCH_ID, fixtureCollections } from '../../fixtures/node/brewery-fixture'
 
 const TOKEN = 'device-token-abc123'
 const OTHER = 'not-the-token'
@@ -171,7 +182,7 @@ describe('sync-server GET /health', () => {
     expect(body.ok).toBe(true)
     expect(typeof body.daemonVersion).toBe('string')
     expect(body.daemonVersion.length).toBeGreaterThan(0)
-    expect(body.supportedDumpVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
+    expect(body.supportedDumpVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
   })
 
   it('honors an injected daemonVersion override', async () => {
@@ -311,7 +322,9 @@ describe('sync-server /state — 401 auth-failure logging', () => {
     const bad = await fetch(`${base}/state`, { headers: auth(OTHER) })
     expect(bad.status).toBe(401)
     expect(lines).toHaveLength(1)
-    expect(lines[0]).toMatch(/^\[sync\] auth failure at=\S+ remote=\S+ path=\/state\n$/)
+    expect(lines[0]).toMatch(
+      /^\[sync\] auth failure at=\S+ remote=\S+ path=\/state scope=full token=invalid\n$/,
+    )
     expect(lines[0]).not.toContain(OTHER)
     expect(lines[0]).not.toContain(TOKEN)
     expect(lines[0]).not.toContain('Bearer')
@@ -324,7 +337,7 @@ describe('sync-server /state — 401 auth-failure logging', () => {
     await new Promise<void>((resolve) => server.close(() => resolve()))
   })
 
-  it('prefers the first X-Forwarded-For hop as the logged remote address', async () => {
+  it('logs the SOCKET peer as remote= and the client-controlled X-Forwarded-For only as a labeled untrusted extra', async () => {
     const lines: string[] = []
     const dir = await mkdtemp(join(tmpdir(), 'sync-server-authlog-xff-'))
     const filePath = join(dir, 'brewery.json')
@@ -336,11 +349,17 @@ describe('sync-server /state — 401 auth-failure logging', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
     const { port } = server.address() as AddressInfo
 
+    // A client forging XFF must NOT be able to attribute its failure to an
+    // arbitrary address: remote= stays the socket peer (this test connects
+    // over loopback), and the forged value appears only under the
+    // explicitly-labeled untrusted-xff= key, JSON-quoted.
     await fetch(`http://127.0.0.1:${port}/state`, {
       headers: { ...auth(OTHER), 'x-forwarded-for': '203.0.113.7, 10.0.0.1' },
     })
     expect(lines).toHaveLength(1)
-    expect(lines[0]).toContain('remote=203.0.113.7')
+    expect(lines[0]).toContain('remote=127.0.0.1')
+    expect(lines[0]).not.toContain('remote=203.0.113.7')
+    expect(lines[0]).toContain('untrusted-xff="203.0.113.7, 10.0.0.1"')
 
     await new Promise<void>((resolve) => server.close(() => resolve()))
   })
@@ -697,5 +716,770 @@ describe('sync-server /state — ETag / If-Match optimistic concurrency', () => 
     const get = await fetch(`${base}/state`, { headers: auth() })
     const body = await get.json()
     expect(['2026-03-01T00:00:00.000Z', '2026-03-02T00:00:00.000Z']).toContain(body.exportedAt)
+  })
+})
+
+describe('sync-server POST /readings (automatic sensor ingestion)', () => {
+  let server: Server
+  let base: string
+  let filePath: string
+  let dir: string
+
+  const LINKED_KEY = 'tilt:RED'
+
+  /** Seed the canonical file directly (bypassing PUT /state) with a v10 dump
+   *  whose deviceLinks table links `LINKED_KEY` → the fixture's batch. */
+  async function seedLinkedState(): Promise<void> {
+    const c = fixtureCollections()
+    c.deviceLinks = [
+      {
+        id: '99999999-0000-4000-8000-000000000abc',
+        deviceKey: LINKED_KEY,
+        batchId: BATCH_ID,
+        createdAt: '2026-07-01T00:00:00.000Z',
+        updatedAt: '2026-07-01T00:00:00.000Z',
+        schemaVersion: 1,
+      },
+    ]
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        version: 10,
+        exportedAt: '2026-07-09T00:00:00.000Z',
+        meta: { dumpVersion: 10, dbVersion: 10, rowCounts: {}, schemaVersion: 1 },
+        tables: c,
+      }),
+      'utf8',
+    )
+  }
+
+  async function startServer(
+    opts: Partial<Parameters<typeof createSyncServer>[0]> = {},
+  ): Promise<void> {
+    server = createSyncServer({
+      filePath,
+      tokenHashes: new Set([sha256Hex(TOKEN)]),
+      authFailureLog: () => {},
+      ...opts,
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+    base = `http://127.0.0.1:${port}`
+  }
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'sync-server-readings-'))
+    filePath = join(dir, 'brewery.json')
+  })
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  })
+
+  async function post(body: unknown, t = TOKEN): Promise<Response> {
+    return fetch(`${base}/readings`, {
+      method: 'POST',
+      headers: auth(t),
+      body: JSON.stringify(body),
+    })
+  }
+
+  it('405s a non-POST method', async () => {
+    await startServer()
+    const res = await fetch(`${base}/readings`, { headers: auth() })
+    expect(res.status).toBe(405)
+  })
+
+  it('rejects a missing/bad token with 401 and logs one token-free audit line', async () => {
+    const lines: string[] = []
+    await startServer({ authFailureLog: (line) => lines.push(line) })
+    const noAuth = await fetch(`${base}/readings`, {
+      method: 'POST',
+      body: JSON.stringify({ deviceKey: 'tilt:RED', gravity: 1.04 }),
+    })
+    expect(noAuth.status).toBe(401)
+    const badAuth = await post({ deviceKey: 'tilt:RED', gravity: 1.04 }, 'nope')
+    expect(badAuth.status).toBe(401)
+
+    expect(lines).toHaveLength(2)
+    // Scope-aware: /readings failures log scope=ingest; the tokenless request
+    // classifies as absent, the bad-token one as invalid — never material.
+    expect(lines[0]).toMatch(
+      /^\[sync\] auth failure at=\S+ remote=\S+ path=\/readings scope=ingest token=absent\n$/,
+    )
+    expect(lines[1]).toMatch(
+      /^\[sync\] auth failure at=\S+ remote=\S+ path=\/readings scope=ingest token=invalid\n$/,
+    )
+    for (const line of lines) {
+      expect(line).not.toContain(TOKEN)
+      expect(line).not.toContain('Bearer')
+    }
+  })
+
+  it('rejects invalid JSON with 400', async () => {
+    await startServer()
+    const res = await fetch(`${base}/readings`, {
+      method: 'POST',
+      headers: auth(),
+      body: 'not json',
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects an unrecognized payload shape with 400', async () => {
+    await startServer()
+    const res = await post({ foo: 'bar' })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/unrecognized/i)
+  })
+
+  it('an UNLINKED device gets 202 {status:"unlinked", deviceKey} and persists NOTHING', async () => {
+    await startServer() // no canonical file at all yet
+    const res = await post({ deviceKey: 'tilt:GREEN', gravity: 1.042 })
+    expect(res.status).toBe(202)
+    expect(await res.json()).toEqual({ ok: true, status: 'unlinked', deviceKey: 'tilt:GREEN' })
+
+    // Nothing was ever written — GET /state still reports empty.
+    const state = await fetch(`${base}/state`, { headers: auth() })
+    expect(state.status).toBe(204)
+  })
+
+  it('a LINKED device (generic shape) gets 200, the reading is appended to the batch, and the ETag changes', async () => {
+    await seedLinkedState()
+    await startServer()
+
+    const before = await fetch(`${base}/state`, { headers: auth() })
+    const etagBefore = before.headers.get('etag')
+
+    const res = await post({ deviceKey: LINKED_KEY, gravity: 1.042, tempC: 19.5 })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toMatchObject({
+      ok: true,
+      status: 'linked',
+      deviceKey: LINKED_KEY,
+      batchId: BATCH_ID,
+    })
+    expect(typeof body.readingId).toBe('string')
+    expect(res.headers.get('etag')).toBeTruthy()
+    expect(res.headers.get('etag')).not.toBe(etagBefore)
+
+    const after = await fetch(`${base}/state`, { headers: auth() })
+    const state = await after.json()
+    expect(after.headers.get('etag')).toBe(res.headers.get('etag'))
+    const appended = state.tables.readings.find((r: { id: string }) => r.id === body.readingId)
+    expect(appended).toMatchObject({
+      batchId: BATCH_ID,
+      gravity: 1.042,
+      tempC: 19.5,
+      source: 'other',
+    })
+    // Every other table is untouched — /readings only ever appends a reading.
+    expect(state.tables.recipes).toHaveLength(fixtureCollections().recipes.length)
+  })
+
+  it('a Tilt-native payload resolves via the SAME link (deviceKey normalization matches)', async () => {
+    await seedLinkedState()
+    await startServer()
+    const res = await post({ Color: 'RED', SG: 1042, Temp: 68 })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.deviceKey).toBe('tilt:RED')
+    expect(body.batchId).toBe(BATCH_ID)
+  })
+
+  it('re-posting an IDENTICAL reading dedupes (same reading id, no duplicate row)', async () => {
+    await seedLinkedState()
+    // Rate limiting is orthogonal to this test's concern (dedupe) — disable it
+    // so two rapid posts from the same deviceKey aren't conflated with a 429.
+    await startServer({ ingestMinIntervalS: 0 })
+
+    const payload = {
+      deviceKey: LINKED_KEY,
+      gravity: 1.042,
+      tempC: 19.5,
+      at: '2026-07-10T12:00:00.000Z',
+    }
+    const first = await post(payload)
+    expect(first.status).toBe(200)
+    const firstBody = await first.json()
+
+    const second = await post(payload)
+    expect(second.status).toBe(200)
+    const secondBody = await second.json()
+    expect(secondBody.readingId).toBe(firstBody.readingId)
+
+    const state = await (await fetch(`${base}/state`, { headers: auth() })).json()
+    const matching = state.tables.readings.filter(
+      (r: { id: string }) => r.id === firstBody.readingId,
+    )
+    expect(matching).toHaveLength(1) // upserted, never duplicated
+  })
+
+  it('a genuinely different reading from the same device coexists as a second row', async () => {
+    await seedLinkedState()
+    await startServer({ ingestMinIntervalS: 0 }) // same-device rate limit is not this test's concern
+    const first = await post({
+      deviceKey: LINKED_KEY,
+      gravity: 1.05,
+      at: '2026-07-10T00:00:00.000Z',
+    })
+    const second = await post({
+      deviceKey: LINKED_KEY,
+      gravity: 1.02,
+      at: '2026-07-12T00:00:00.000Z',
+    })
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    const firstBody = await first.json()
+    const secondBody = await second.json()
+    expect(secondBody.readingId).not.toBe(firstBody.readingId)
+
+    const state = await (await fetch(`${base}/state`, { headers: auth() })).json()
+    const fixtureReadingCount = fixtureCollections().readings.length
+    expect(state.tables.readings).toHaveLength(fixtureReadingCount + 2)
+  })
+
+  it('rate-limits a device posting faster than SYNC_INGEST_MIN_INTERVAL_S with 429, never touching the write path', async () => {
+    await seedLinkedState()
+    const beforeRaw = await readFile(filePath, 'utf8')
+    let clock = new Date('2026-07-10T12:00:00.000Z')
+    await startServer({ ingestMinIntervalS: 60, now: () => clock })
+
+    const first = await post({ deviceKey: LINKED_KEY, gravity: 1.04 })
+    expect(first.status).toBe(200)
+    const afterAccepted = await readFile(filePath, 'utf8')
+    expect(afterAccepted).not.toBe(beforeRaw) // the ONE accepted write really landed
+
+    clock = new Date(clock.getTime() + 1000) // 1s later — still inside the 60s window
+    const second = await post({ deviceKey: LINKED_KEY, gravity: 1.03 })
+    expect(second.status).toBe(429)
+    const body = await second.json()
+    expect(body.error).toMatch(/rate limited/i)
+    expect(typeof body.retryAfterS).toBe('number')
+    expect(second.headers.get('retry-after')).toBeTruthy()
+
+    // The rate-limited request never reached the write path at all — the
+    // state file bytes are IDENTICAL before and after the 429.
+    expect(await readFile(filePath, 'utf8')).toBe(afterAccepted)
+
+    // A DIFFERENT device is unaffected by the first device's rate limit.
+    clock = new Date(clock.getTime() + 1000)
+    const otherDevice = await post({ deviceKey: 'tilt:GREEN', gravity: 1.03 })
+    expect(otherDevice.status).toBe(202) // unlinked, but NOT rate-limited
+    expect(await readFile(filePath, 'utf8')).toBe(afterAccepted) // …and persisted nothing either
+
+    clock = new Date(clock.getTime() + 60_000)
+    const third = await post({ deviceKey: LINKED_KEY, gravity: 1.01 })
+    expect(third.status).toBe(200) // window elapsed — accepted again
+  })
+
+  it('SYNC_INGEST_MIN_INTERVAL_S = 0 disables rate limiting', async () => {
+    await seedLinkedState()
+    await startServer({ ingestMinIntervalS: 0 })
+    const first = await post({ deviceKey: LINKED_KEY, gravity: 1.04 })
+    const second = await post({ deviceKey: LINKED_KEY, gravity: 1.03 })
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+  })
+
+  it('over-cap body aborts the connection (readBody destroys the socket before a response can be written — pre-existing readBody behavior shared with PUT /state, not new to this route)', async () => {
+    await seedLinkedState()
+    await startServer({ maxBodyBytes: 10 })
+    // `readBody`'s size-cap path calls `req.destroy()` as soon as it sees a
+    // chunk over the limit — the request/response share one socket, so the
+    // client observes a hard connection reset rather than a clean 413 body.
+    // This is the SAME `readBody` helper /state's PUT has always used; this
+    // test documents the real observed behavior rather than asserting a
+    // status code that never actually reaches the wire.
+    await expect(post({ deviceKey: LINKED_KEY, gravity: 1.04 })).rejects.toThrow()
+  })
+
+  it('never logs the Authorization header value on a successful ingest', async () => {
+    const lines: string[] = []
+    await seedLinkedState()
+    await startServer({ authFailureLog: (line) => lines.push(line) })
+    const res = await post({ deviceKey: LINKED_KEY, gravity: 1.04 })
+    expect(res.status).toBe(200)
+    expect(lines).toHaveLength(0)
+  })
+
+  // ── F1: a link whose batch no longer exists must never keep ingesting ────
+
+  /** Write a v10 dump whose ONE deviceLink points at `batchId`, which is
+   *  either genuinely absent from `tables.batches` or present-but-tombstoned
+   *  (a defensive, hand-edited-file case) — the caller picks via `tombstone`. */
+  async function seedOrphanLinkState(
+    deviceKey: string,
+    batchId: string,
+    opts: { tombstoneBatch?: boolean } = {},
+  ): Promise<void> {
+    const c = fixtureCollections()
+    c.deviceLinks = [
+      {
+        id: '99999999-1111-4111-8111-000000000abc',
+        deviceKey,
+        batchId,
+        createdAt: '2026-07-01T00:00:00.000Z',
+        updatedAt: '2026-07-01T00:00:00.000Z',
+        schemaVersion: 1,
+      },
+    ]
+    if (opts.tombstoneBatch) {
+      c.rowTombstones = [{ id: batchId, table: 'batches', deletedAt: '2026-07-05T00:00:00.000Z' }]
+    }
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        version: 10,
+        exportedAt: '2026-07-09T00:00:00.000Z',
+        meta: { dumpVersion: 10, dbVersion: 10, rowCounts: {}, schemaVersion: 1 },
+        tables: c,
+      }),
+      'utf8',
+    )
+  }
+
+  it('a link whose batchId is ABSENT from tables.batches gets 202 {status:"batch-missing"} and persists nothing', async () => {
+    const missingBatchId = '00000000-0000-4000-8000-0000000000bd'
+    await seedOrphanLinkState('tilt:ORPHAN', missingBatchId)
+    await startServer()
+
+    const before = await fetch(`${base}/state`, { headers: auth() })
+    const etagBefore = before.headers.get('etag')
+
+    const res = await post({ deviceKey: 'tilt:ORPHAN', gravity: 1.04 })
+    expect(res.status).toBe(202)
+    expect(await res.json()).toEqual({
+      ok: true,
+      status: 'batch-missing',
+      deviceKey: 'tilt:ORPHAN',
+    })
+
+    const after = await fetch(`${base}/state`, { headers: auth() })
+    expect(after.headers.get('etag')).toBe(etagBefore) // nothing written at all
+    const state = await after.json()
+    expect(state.tables.readings).toHaveLength(fixtureCollections().readings.length)
+  })
+
+  it('a link whose batch is present but TOMBSTONED in rowTombstones gets 202 {status:"batch-missing"} and persists nothing', async () => {
+    await seedOrphanLinkState('tilt:GONE', BATCH_ID, { tombstoneBatch: true })
+    await startServer()
+
+    const res = await post({ deviceKey: 'tilt:GONE', gravity: 1.04 })
+    expect(res.status).toBe(202)
+    expect(await res.json()).toEqual({ ok: true, status: 'batch-missing', deviceKey: 'tilt:GONE' })
+
+    const state = await (await fetch(`${base}/state`, { headers: auth() })).json()
+    expect(state.tables.readings).toHaveLength(fixtureCollections().readings.length)
+  })
+
+  // ── F3: a non-persisting outcome must never burn the rate-limit slot ─────
+
+  it('a batch-missing outcome never records a rate-limit hit — two rapid posts both 202, never 429', async () => {
+    const missingBatchId = '00000000-0000-4000-8000-0000000000be'
+    await seedOrphanLinkState('tilt:ORPHAN2', missingBatchId)
+    await startServer({ ingestMinIntervalS: 60 })
+
+    const first = await post({ deviceKey: 'tilt:ORPHAN2', gravity: 1.04 })
+    expect(first.status).toBe(202)
+    const second = await post({ deviceKey: 'tilt:ORPHAN2', gravity: 1.03 })
+    expect(second.status).toBe(202) // NOT 429
+  })
+
+  it('an unlinked outcome never records a rate-limit hit — two rapid posts both 202, never 429', async () => {
+    await startServer({ ingestMinIntervalS: 60 }) // no canonical file at all yet
+    const first = await post({ deviceKey: 'tilt:NEVER-LINKED', gravity: 1.04 })
+    expect(first.status).toBe(202)
+    const second = await post({ deviceKey: 'tilt:NEVER-LINKED', gravity: 1.03 })
+    expect(second.status).toBe(202) // NOT 429
+  })
+
+  // ── F2: honest dedupe — only a payload with its OWN timestamp dedupes ────
+
+  it('re-posting an IDENTICAL device-native (Tilt) reading does NOT dedupe — mints a second row, because no device-native adapter parses a payload timestamp so each POST gets a fresh server `at` (the rate limit, not this id, is the real retry guard for these shapes)', async () => {
+    await seedLinkedState()
+    let clock = new Date('2026-07-10T12:00:00.000Z')
+    await startServer({ ingestMinIntervalS: 0, now: () => clock })
+
+    const payload = { Color: 'RED', SG: 1042, Temp: 68 }
+    const first = await post(payload)
+    expect(first.status).toBe(200)
+    const firstBody = await first.json()
+
+    clock = new Date(clock.getTime() + 1) // "identical" from the device's POV, 1ms later server-side
+    const second = await post(payload)
+    expect(second.status).toBe(200)
+    const secondBody = await second.json()
+    expect(secondBody.readingId).not.toBe(firstBody.readingId)
+
+    const state = await (await fetch(`${base}/state`, { headers: auth() })).json()
+    const fixtureReadingCount = fixtureCollections().readings.length
+    expect(state.tables.readings).toHaveLength(fixtureReadingCount + 2) // two distinct rows, not one
+  })
+
+  // ── F4: the ingest write is SURGICAL — only tables.readings is touched ───
+
+  it('an unknown extra field on a stored row (any other table) survives an ingest byte-for-byte', async () => {
+    const c = fixtureCollections()
+    c.deviceLinks = [
+      {
+        id: '99999999-2222-4222-8222-000000000abc',
+        deviceKey: LINKED_KEY,
+        batchId: BATCH_ID,
+        createdAt: '2026-07-01T00:00:00.000Z',
+        updatedAt: '2026-07-01T00:00:00.000Z',
+        schemaVersion: 1,
+      },
+    ]
+    const tablesWithUnknownField = {
+      ...c,
+      recipes: [{ ...c.recipes[0], mysteryField: 'keep-me-verbatim' }],
+    }
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        version: 10,
+        exportedAt: '2026-07-09T00:00:00.000Z',
+        meta: { dumpVersion: 10, dbVersion: 10, rowCounts: {}, schemaVersion: 1 },
+        tables: tablesWithUnknownField,
+      }),
+      'utf8',
+    )
+    await startServer()
+
+    const res = await post({ deviceKey: LINKED_KEY, gravity: 1.04 })
+    expect(res.status).toBe(200)
+
+    const state = await (await fetch(`${base}/state`, { headers: auth() })).json()
+    expect(state.tables.recipes[0].mysteryField).toBe('keep-me-verbatim')
+  })
+
+  it('an ingest against a v9-stored file (no deviceLinks table at all) never rewrites the stored envelope to v10 — every device resolves unlinked', async () => {
+    const v9Tables: Record<string, unknown> = { ...fixtureCollections() }
+    delete v9Tables.deviceLinks
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        version: 9,
+        exportedAt: '2026-07-09T00:00:00.000Z',
+        meta: { dumpVersion: 9, dbVersion: 9, rowCounts: {}, schemaVersion: 1 },
+        tables: v9Tables,
+      }),
+      'utf8',
+    )
+    await startServer()
+
+    const res = await post({ deviceKey: LINKED_KEY, gravity: 1.04 })
+    expect(res.status).toBe(202)
+    expect((await res.json()).status).toBe('unlinked') // no deviceLinks table ⇒ nothing can ever match
+
+    const raw = JSON.parse(await readFile(filePath, 'utf8'))
+    expect(raw.version).toBe(9) // never silently upgraded by an ingest
+  })
+
+  it('a successful ingest preserves `meta`, `version`, and `exportedAt` verbatim — only tables.readings changes', async () => {
+    await seedLinkedState()
+    await startServer()
+    const beforeRaw = JSON.parse(await readFile(filePath, 'utf8'))
+
+    const res = await post({ deviceKey: LINKED_KEY, gravity: 1.04 })
+    expect(res.status).toBe(200)
+
+    const afterRaw = JSON.parse(await readFile(filePath, 'utf8'))
+    expect(afterRaw.meta).toEqual(beforeRaw.meta)
+    expect(afterRaw.version).toBe(beforeRaw.version)
+    expect(afterRaw.exportedAt).toBe(beforeRaw.exportedAt)
+  })
+
+  // ── rate-limit TOCTOU: the limit must hold under TRUE concurrency ────────
+
+  it('N truly concurrent posts from the SAME device: exactly ONE persists, the rest 429 — the pre-mutex peek alone cannot be bypassed', async () => {
+    await seedLinkedState()
+    const clock = new Date('2026-07-10T12:00:00.000Z')
+    await startServer({ ingestMinIntervalS: 60, now: () => clock })
+
+    // All 8 fire before any response lands, so every one of them passes the
+    // cheap pre-mutex peek — only the authoritative re-check INSIDE the
+    // mutex can reject the 7 losers of the race.
+    const responses = await Promise.all(
+      Array.from({ length: 8 }, (_, i) =>
+        post({ deviceKey: LINKED_KEY, gravity: 1.01 + i * 0.001 }),
+      ),
+    )
+    const statuses = responses.map((r) => r.status).sort()
+    expect(statuses).toEqual([200, 429, 429, 429, 429, 429, 429, 429])
+
+    // Every 429 carries the same wire contract as the fast-path one.
+    const limited = responses.filter((r) => r.status === 429)
+    for (const res of limited) expect(res.headers.get('retry-after')).toBeTruthy()
+    const limitedBody = await limited[0].json()
+    expect(limitedBody.error).toMatch(/rate limited/i)
+    expect(typeof limitedBody.retryAfterS).toBe('number')
+
+    // Exactly ONE reading landed on disk.
+    const state = JSON.parse(await readFile(filePath, 'utf8'))
+    expect(state.tables.readings).toHaveLength(fixtureCollections().readings.length + 1)
+  })
+
+  // ── the write mutex serializes /readings: no lost updates ────────────────
+
+  it('N truly concurrent posts from DISTINCT linked devices ALL persist — the mutex serializes the read-modify-write', async () => {
+    const keys = Array.from({ length: 8 }, (_, i) => `sensor:concurrent-${i}`)
+    const c = fixtureCollections()
+    c.deviceLinks = keys.map((deviceKey, i) => ({
+      id: `99999999-3333-4333-8333-00000000000${i}`,
+      deviceKey,
+      batchId: BATCH_ID,
+      createdAt: '2026-07-01T00:00:00.000Z',
+      updatedAt: '2026-07-01T00:00:00.000Z',
+      schemaVersion: 1,
+    }))
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        version: 10,
+        exportedAt: '2026-07-09T00:00:00.000Z',
+        meta: { dumpVersion: 10, dbVersion: 10, rowCounts: {}, schemaVersion: 1 },
+        tables: c,
+      }),
+      'utf8',
+    )
+    await startServer() // default rate limit — it is per-device, so distinct devices never collide
+
+    const responses = await Promise.all(
+      keys.map((deviceKey, i) => post({ deviceKey, gravity: 1.01 + i * 0.001 })),
+    )
+    for (const res of responses) expect(res.status).toBe(200)
+    const bodies = await Promise.all(responses.map((r) => r.json()))
+    const readingIds = bodies.map((b) => b.readingId as string)
+    expect(new Set(readingIds).size).toBe(keys.length)
+
+    // The state file is ONE valid JSON dump containing EVERY reading — an
+    // unserialized read-modify-write would have clobbered at least one
+    // concurrent append (a lost update).
+    const state = JSON.parse(await readFile(filePath, 'utf8'))
+    const persistedIds = state.tables.readings.map((r: { id: string }) => r.id)
+    for (const id of readingIds) expect(persistedIds).toContain(id)
+    expect(state.tables.readings).toHaveLength(fixtureCollections().readings.length + keys.length)
+  })
+
+  // ── ingest appends never rotate generations (disaster-recovery window) ───
+
+  it('an accepted ingest never rotates generations — .bak snapshots belong to destructive PUTs alone', async () => {
+    await seedLinkedState()
+    await startServer({ ingestMinIntervalS: 0 })
+
+    const bakFiles = async () =>
+      (await readdir(dir)).filter((n) => n.startsWith('brewery.json.') && n.endsWith('.bak'))
+
+    // Two accepted appends: were these rotating (the old behavior), a Tilt at
+    // the 60s floor would flush the whole keep=10 window in ~10 minutes.
+    expect((await post({ deviceKey: LINKED_KEY, gravity: 1.04 })).status).toBe(200)
+    expect((await post({ deviceKey: LINKED_KEY, gravity: 1.03 })).status).toBe(200)
+    expect(await bakFiles()).toHaveLength(0)
+
+    // The SAME daemon still snapshots on a destructive PUT — generations
+    // exist to survive exactly those.
+    const etag = (await fetch(`${base}/state`, { headers: auth() })).headers.get('etag') as string
+    const put = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: authIfMatch(etag),
+      body: JSON.stringify(validDump()),
+    })
+    expect(put.status).toBe(200)
+    expect(await bakFiles()).toHaveLength(1)
+  })
+
+  // ── form-encoded bodies (the Tilt app cloud-URL convention) ──────────────
+
+  async function postRaw(body: string, headers: Record<string, string>): Promise<Response> {
+    return fetch(`${base}/readings`, { method: 'POST', headers, body })
+  }
+
+  it('accepts an application/x-www-form-urlencoded body — the Tilt app cloud-URL convention', async () => {
+    await seedLinkedState()
+    await startServer()
+    const res = await postRaw(
+      'Timepoint=45123.4269&Temp=65.0&SG=1.010&Color=RED&Comment=&Beer=Untitled',
+      { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/x-www-form-urlencoded' },
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toMatchObject({
+      ok: true,
+      status: 'linked',
+      deviceKey: 'tilt:RED',
+      batchId: BATCH_ID,
+    })
+    expect(typeof body.readingId).toBe('string')
+  })
+
+  it('a form-encoded generic payload routes through the same detection as JSON', async () => {
+    await seedLinkedState()
+    await startServer()
+    const res = await postRaw(`deviceKey=${encodeURIComponent(LINKED_KEY)}&gravity=1.042`, {
+      authorization: `Bearer ${TOKEN}`,
+      'content-type': 'application/x-www-form-urlencoded',
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toMatchObject({ ok: true, status: 'linked', deviceKey: LINKED_KEY })
+  })
+
+  it('sniffs a query-string body carrying a known sensor field when the Content-Type is not form-encoded', async () => {
+    await seedLinkedState()
+    await startServer()
+    // No explicit content-type → fetch labels the body text/plain; it is not
+    // JSON but IS a query string with known Tilt fields (mislabeling senders
+    // exist in the wild).
+    const res = await postRaw('Color=RED&SG=1.010&Temp=65.0', {
+      authorization: `Bearer ${TOKEN}`,
+    })
+    expect(res.status).toBe(200)
+    expect((await res.json()).deviceKey).toBe('tilt:RED')
+  })
+
+  it('still 400s a body that is neither JSON nor a recognizable query string', async () => {
+    await startServer()
+    // URLSearchParams would happily "parse" this to { 'not json': '' } — the
+    // known-field guard is what keeps the response an honest invalid-json 400.
+    const res = await postRaw('not json', { authorization: `Bearer ${TOKEN}` })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('invalid json')
+  })
+
+  // ── /readings has its own tight body cap, decoupled from /state's 64 MB ──
+
+  it('a /readings body under the 256 KB ingest cap is read + processed normally', async () => {
+    await seedLinkedState()
+    await startServer()
+    const pad = 'x'.repeat(200 * 1024) // ~200 KB — under the ingest cap
+    const res = await post({ deviceKey: LINKED_KEY, gravity: 1.04, pad })
+    expect(res.status).toBe(200)
+  })
+
+  it('POST /readings enforces its own 256 KB cap while /state keeps the 64 MB whole-brewery allowance', async () => {
+    await seedLinkedState()
+    await startServer() // NO maxBodyBytes override — both routes on their defaults
+
+    // /state happily reads a >256 KB body: the 400 proves it was fully read
+    // and JSON-parsed, well past the ingest cap.
+    const bigPad = 'x'.repeat(300 * 1024)
+    const put = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: authIfMatch(EMPTY_ETAG_SENTINEL),
+      body: bigPad,
+    })
+    expect(put.status).toBe(400)
+    expect((await put.json()).error).toBe('invalid json')
+
+    // The SAME body size on /readings trips the ingest cap mid-read (see the
+    // over-cap test above for why the client observes a connection abort, not
+    // a clean 413).
+    await expect(post({ deviceKey: LINKED_KEY, gravity: 1.04, pad: bigPad })).rejects.toThrow()
+  })
+})
+
+describe('sync-server — ingest-scoped tokens (SYNC_INGEST_TOKEN_HASHES)', () => {
+  const INGEST_TOKEN = 'bridge-token-xyz789'
+  let server: Server
+  let base: string
+  let filePath: string
+
+  beforeEach(async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'sync-server-ingest-token-'))
+    filePath = join(dir, 'brewery.json')
+  })
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  })
+
+  async function startServer(
+    opts: Partial<Parameters<typeof createSyncServer>[0]> = {},
+  ): Promise<void> {
+    server = createSyncServer({
+      filePath,
+      tokenHashes: new Set([sha256Hex(TOKEN)]),
+      ingestTokenHashes: new Set([sha256Hex(INGEST_TOKEN)]),
+      authFailureLog: () => {},
+      ...opts,
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+    base = `http://127.0.0.1:${port}`
+  }
+
+  async function postReading(t: string): Promise<Response> {
+    return fetch(`${base}/readings`, {
+      method: 'POST',
+      headers: auth(t),
+      body: JSON.stringify({ deviceKey: 'tilt:BRIDGE', gravity: 1.042 }),
+    })
+  }
+
+  it('an ingest-scoped token is accepted on POST /readings', async () => {
+    await startServer()
+    // 202 unlinked (no canonical file yet) — the point is it got PAST auth
+    // all the way to device-link resolution; a rejected token would 401.
+    const res = await postReading(INGEST_TOKEN)
+    expect(res.status).toBe(202)
+    expect((await res.json()).status).toBe('unlinked')
+  })
+
+  it('a FULL token still works on POST /readings when ingest tokens are also configured', async () => {
+    await startServer()
+    const res = await postReading(TOKEN)
+    expect(res.status).toBe(202)
+  })
+
+  it('an ingest-scoped token on GET and PUT /state gets a 401 indistinguishable from a bad token', async () => {
+    await startServer()
+    const withIngestGet = await fetch(`${base}/state`, { headers: auth(INGEST_TOKEN) })
+    const withGarbageGet = await fetch(`${base}/state`, { headers: auth(OTHER) })
+    expect(withIngestGet.status).toBe(401)
+    expect(withGarbageGet.status).toBe(401)
+    // Identical bodies — a probe can't learn the ingest token is partially valid.
+    expect(await withIngestGet.json()).toEqual(await withGarbageGet.json())
+
+    const withIngestPut = await fetch(`${base}/state`, {
+      method: 'PUT',
+      headers: auth(INGEST_TOKEN),
+      body: '{}',
+    })
+    expect(withIngestPut.status).toBe(401)
+  })
+
+  it('the 401 audit line for an ingest token on /state is scope-aware (server-side only, no material)', async () => {
+    const lines: string[] = []
+    await startServer({ authFailureLog: (line) => lines.push(line) })
+    await fetch(`${base}/state`, { headers: auth(INGEST_TOKEN) })
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatch(
+      /^\[sync\] auth failure at=\S+ remote=\S+ path=\/state scope=full token=ingest-scoped\n$/,
+    )
+    expect(lines[0]).not.toContain(INGEST_TOKEN)
+    expect(lines[0]).not.toContain('Bearer')
+  })
+})
+
+describe('parseIngestTokenHashes (SYNC_INGEST_TOKEN_HASHES)', () => {
+  it('unset/empty → undefined (no ingest scope configured)', () => {
+    expect(parseIngestTokenHashes(undefined)).toBeUndefined()
+    expect(parseIngestTokenHashes('')).toBeUndefined()
+    expect(parseIngestTokenHashes('   ')).toBeUndefined()
+  })
+
+  it('parses a comma-separated list, trimming and lowercasing (same format as SYNC_TOKEN_HASHES)', () => {
+    const a = sha256Hex('bridge-a')
+    const b = sha256Hex('bridge-b')
+    expect(parseIngestTokenHashes(` ${a.toUpperCase()} , ${b} `)).toEqual(new Set([a, b]))
+  })
+
+  it('set but containing no valid sha256-hex hash → throws (refuse to start, never silently lock the bridge out)', () => {
+    expect(() => parseIngestTokenHashes('nothex')).toThrow(/sha256-hex/i)
+    expect(() => parseIngestTokenHashes('deadbeef')).toThrow(/sha256-hex/i) // right alphabet, wrong length
   })
 })

@@ -118,6 +118,30 @@ describe('FermentationReadings (via BatchSheetView)', () => {
     )
   })
 
+  it('shows a source badge per reading — "manual" for a hand-typed row, the device label for a sensor-ingested one', async () => {
+    await readingsRepo.create({
+      id: 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
+      batchId: BATCH_ID,
+      at: '2026-07-04T12:00:00.000Z',
+      gravity: 1.05,
+      schemaVersion: 1,
+      // no `source` — the pre-existing manual-entry shape
+    })
+    await readingsRepo.create({
+      id: 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb',
+      batchId: BATCH_ID,
+      at: '2026-07-05T12:00:00.000Z',
+      gravity: 1.03,
+      source: 'tilt',
+      deviceId: 'RED',
+      schemaVersion: 1,
+    })
+    render(<BatchSheetView />)
+    await screen.findByText('1.050')
+    const badges = await screen.findAllByTestId('reading-source-badge')
+    expect(badges.map((b) => b.textContent)).toEqual(expect.arrayContaining(['manual', 'Tilt']))
+  })
+
   it('per-row delete removes the reading', async () => {
     const user = userEvent.setup()
     await readingsRepo.create({

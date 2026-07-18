@@ -19,9 +19,9 @@ describe('collectDiagnostics', () => {
 
   it('composes the full read-model shape from E1/E2 primitives on an empty DB', async () => {
     const snap = await collectDiagnostics()
-    // Database — 16 tables (appMeta + rowTombstones included), verno 11
-    expect(snap.db.verno).toBe(11)
-    expect(snap.db.tables).toHaveLength(16)
+    // Database — 17 tables (appMeta + rowTombstones + deviceLinks included), verno 12
+    expect(snap.db.verno).toBe(12)
+    expect(snap.db.tables).toHaveLength(17)
     expect(snap.db.tables.map((t) => t.name)).toContain('appMeta')
     expect(snap.db.tables.every((t) => t.count === 0)).toBe(true)
     // Build stamp from version.ts — env unset in test → dev fallback
@@ -64,8 +64,8 @@ describe('collectDiagnostics', () => {
     // Failed source neutralized to its neutral value
     expect(snap.storage.estimate).toBeNull()
     // Every other source still populates
-    expect(snap.db.tables).toHaveLength(16)
-    expect(snap.db.verno).toBe(11)
+    expect(snap.db.tables).toHaveLength(17)
+    expect(snap.db.verno).toBe(12)
     expect(snap.build.version).toBe('0.0.0-dev')
     expect(snap.storage.persistence).toBe('unsupported')
     expect(snap.sw.supported).toBe(false)

@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie'
 
 import type { BrewSession } from '@/lib/brewing/process/session'
 import type { Batch } from '@/lib/brewing/types/batch'
+import type { DeviceLink } from '@/lib/brewing/types/device-link'
 import type { EquipmentProfile } from '@/lib/brewing/types/equipment'
 import type { GearItem } from '@/lib/brewing/types/gear'
 import type { Ingredient, Water } from '@/lib/brewing/types/ingredient'
@@ -62,6 +63,7 @@ export class BrewDB extends Dexie {
   appMeta!: Table<AppMetaRow, string>
   yeastLots!: Table<YeastLot, string>
   rowTombstones!: Table<RowTombstone, string>
+  deviceLinks!: Table<DeviceLink, string>
 
   constructor(name = 'brew-db') {
     super(name)
@@ -143,10 +145,20 @@ export class BrewDB extends Dexie {
     })
     // v11: deletion tombstones for the two-way sync merge (see RowTombstone
     // above). Additive — new empty store, NO upgrade fn; versions 1–10
-    // untouched. INCLUDED in backups (DumpV9). SEPARATE from seedTombstones
-    // (v3) — do not merge the two mechanisms.
+    // untouched. INCLUDED in backups starting DumpV9 (and every version
+    // since — still present in DumpV10, see the v12 deviceLinks note below).
+    // SEPARATE from seedTombstones (v3) — do not merge the two mechanisms.
     this.version(11).stores({
       rowTombstones: 'id, table, deletedAt',
+    })
+    // v12: sensor-device → batch assignments (deviceLinks) — "this device feeds
+    // that batch", resolved by the sync daemon's POST /readings (automatic
+    // hydrometer/sensor ingest). Additive — new empty store, NO upgrade fn;
+    // versions 1–11 untouched. INCLUDED in backups (DumpV10), synced +
+    // tombstoned like every other state table. `deviceKey` indexes the
+    // device→batch lookup; `batchId` supports "links for this batch" listing.
+    this.version(12).stores({
+      deviceLinks: 'id, deviceKey, batchId, updatedAt',
     })
   }
 

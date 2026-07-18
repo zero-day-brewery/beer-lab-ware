@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { BatchSchema } from '@/lib/brewing/types/batch'
+import { DeviceLinkSchema } from '@/lib/brewing/types/device-link'
 import { EquipmentProfileSchema } from '@/lib/brewing/types/equipment'
 import { GearItemSchema } from '@/lib/brewing/types/gear'
 import { IngredientAnySchema, WaterSchema } from '@/lib/brewing/types/ingredient'
@@ -55,6 +56,7 @@ const TABLE_SCHEMAS: Record<string, z.ZodTypeAny> = {
       message: 'deletedAt must be a parseable timestamp',
     }),
   }),
+  deviceLinks: DeviceLinkSchema,
 }
 
 function check(base: Omit<DoctorCheck, 'ok'>, failingIds: string[]): DoctorCheck {
@@ -70,7 +72,7 @@ export async function runDataDoctor(
   database: BrewDB = db,
   expectedVerno: number = db.verno,
 ): Promise<DoctorReport> {
-  const [items, txns, readings, batches, timers, sessions, settingsRows, equipment] =
+  const [items, txns, readings, batches, timers, sessions, settingsRows, equipment, deviceLinks] =
     await Promise.all([
       database.inventoryItems.toArray(),
       database.stockTransactions.toArray(),
@@ -80,6 +82,7 @@ export async function runDataDoctor(
       database.brewSessions.toArray(),
       database.settings.toArray(),
       database.equipmentProfiles.toArray(),
+      database.deviceLinks.toArray(),
     ])
 
   const checks: DoctorCheck[] = []
@@ -250,6 +253,22 @@ export async function runDataDoctor(
         message: `A row coexists with a tombstone that should have suppressed it on the next sync merge (merge bug or hand-edited import). ${tombstoneRows.length} tombstone(s) total in the database.`,
       },
       c8Fail,
+    ),
+  )
+
+  // C9 — orphan deviceLinks.batchId (sensor-device assignment points at a
+  // missing batch — same shape as C3's readings.batchId check).
+  const c9Fail = deviceLinks.filter((l) => !batchIds.has(l.batchId)).map((l) => l.id)
+  checks.push(
+    check(
+      {
+        id: 'C9',
+        label: 'No orphan device links',
+        severity: 'error',
+        count: 0,
+        message: 'A sensor-device link references a missing batch.',
+      },
+      c9Fail,
     ),
   )
 

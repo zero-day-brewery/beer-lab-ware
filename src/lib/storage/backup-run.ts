@@ -1,5 +1,5 @@
 import type { BackupRecord } from '@/lib/brewing/types/backup-meta'
-import { backupService, type DumpV9 } from '@/lib/db/backup'
+import { backupService, type DumpV10 } from '@/lib/db/backup'
 import { appMetaRepo } from '@/lib/db/repos/app-meta'
 import { captureLocalSnapshot, type LocalStateSnapshot } from '@/lib/storage/local-state'
 import { type AppVersion, getAppVersion } from '@/lib/version'
@@ -10,7 +10,7 @@ export const KEEP_LAST = 10
 export class NeedsGestureError extends Error {}
 
 export type BackupMethod = 'fsa-folder' | 'download'
-export type ComposedBackup = DumpV9 & { app: AppVersion; local: LocalStateSnapshot }
+export type ComposedBackup = DumpV10 & { app: AppVersion; local: LocalStateSnapshot }
 
 const MS_PER_DAY = 86_400_000
 

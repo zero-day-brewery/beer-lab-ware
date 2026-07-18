@@ -34,7 +34,8 @@
  * write landing during a retry's network round-trip must never be clobbered.
  *
  * ✅ RESOLVED (deletion tombstones): the merge now carries `rowTombstones`
- * (DumpV9) so a row deleted on one device is never resurrected from another
+ * (introduced in DumpV9, carried forward unchanged in DumpV10) so a row
+ * deleted on one device is never resurrected from another
  * device's stale, pre-delete copy — see `mergeDumpTables` below and the
  * suppression logic in `mergeState`/`mergeLedger`/`mergeTombstones`
  * (sync/merge.ts). Every repo delete path writes a tombstone in the same
@@ -71,11 +72,11 @@
 
 import { v5 as uuidv5 } from 'uuid'
 import type { StockTransaction } from '@/lib/brewing/types/stock-transaction'
-import type { DumpV9 } from '@/lib/db/backup'
+import type { DumpV10 } from '@/lib/db/backup'
 import { mergeLedger, mergeState, mergeTombstones, type RowTombstone } from '@/lib/sync/merge'
 import type { SyncPayload, SyncPushResult, SyncTransport } from '@/lib/sync/transport'
 
-type Tables = DumpV9['tables']
+type Tables = DumpV10['tables']
 
 /**
  * Retention window for a tombstone once it no longer matches a row in either
@@ -279,7 +280,10 @@ function rowsOf(tables: Tables, key: string): { id: string }[] {
  * openings, device-local tables keep the local row, everything else is LWW.
  * Tombstones (`rowTombstones`) are handled as their own pass — merged first
  * (union by table+id, LWW by `deletedAt`), then used to suppress any
- * resurrected row in every other table's merge, then reconciled:
+ * resurrected row in every other table's merge, then a CHILD-ROW pass
+ * (readings of a batch that stayed tombstoned die with the batch — see the
+ * inline comment below for why that check is membership, not timestamp),
+ * then reconciled:
  *   - a tombstone whose row SURVIVED (present in the merged output — only
  *     possible when that row's own timestamp beat `deletedAt`) is SUPERSEDED
  *     and dropped;
@@ -327,6 +331,23 @@ export function mergeDumpTables(
     )
   }
 
+  // Child-row suppression: readings of a tombstoned batch die with it. A
+  // reading the daemon ingested during delete-propagation lag has an `at`
+  // AFTER the batch tombstone's `deletedAt`, so per-row tombstone suppression
+  // (which is at-or-before by design, for edit-after-delete) can never catch
+  // it — it would survive as a PERMANENT orphan: doctor C3 red, and no UI can
+  // remove a reading whose batch no longer exists. The check is therefore
+  // MEMBERSHIP, not timestamp: a reading cannot outlive its batch, so the
+  // only thing that saves it is the batch ITSELF surviving the merge
+  // (edit-after-delete beat the tombstone) — never the reading's own `at`.
+  const batchTombstones = tombstonesByTable.get('batches')
+  if (batchTombstones && batchTombstones.size > 0) {
+    const survivingBatchIds = new Set((out.batches ?? []).map((b) => b.id))
+    out.readings = (out.readings ?? []).filter(
+      (r) => !batchTombstones.has(r.batchId) || survivingBatchIds.has(r.batchId),
+    )
+  }
+
   // Supersede: a tombstone whose row survived in the merged OUTPUT can only
   // have survived because its timestamp beat `deletedAt` (mergeState/
   // mergeLedger already suppressed every at-or-before match) — it's stale,
@@ -359,8 +380,8 @@ function rowCounts(tables: Tables): Record<string, number> {
 
 /** Minimal backup surface `syncOnce` needs (matches `backupService`). */
 export interface SyncBackup {
-  dump(): Promise<DumpV9>
-  restore(d: DumpV9): Promise<void>
+  dump(): Promise<DumpV10>
+  restore(d: DumpV10): Promise<void>
 }
 
 /**
@@ -373,8 +394,14 @@ export interface SyncBackup {
  *     device consumes canonical; it never publishes.
  *   - `'push-only'` — "desktop is canonical": publish local state as the new
  *     canonical (correct If-Match handling incl. the empty-store bootstrap),
- *     but NEVER merge or restore remote data down. Remote-only changes are
- *     intentionally replaced.
+ *     but NEVER merge or restore remote data down. Remote-only changes the
+ *     USER authored elsewhere are intentionally replaced — with ONE carve-out:
+ *     readings the sync daemon ingested straight into canonical
+ *     (`POST /readings`) are grafted into the published state instead of
+ *     destroyed, because they may exist NOWHERE else (this device never pulls
+ *     them down). A locally-deleted (tombstoned) reading stays deleted, and a
+ *     grafted reading whose batch is absent from the outgoing dump is dropped
+ *     rather than published as an instant orphan — see `graftDaemonReadings`.
  */
 export type SyncMode = 'two-way' | 'pull-only' | 'push-only'
 
@@ -404,6 +431,14 @@ export interface SyncResult {
   merged: boolean
   lastSyncAt: string
   counts: Record<string, number>
+  /**
+   * `'push-only'` passes only (absent in every other mode): canonical-only
+   * (daemon-ingested) readings that could NOT be grafted into the published
+   * state because their batch doesn't exist in the outgoing dump — publishing
+   * them would create instant orphans (doctor C3) with no UI to remove them,
+   * so they're dropped and counted here instead (see `graftDaemonReadings`).
+   */
+  orphanReadingsDropped?: number
 }
 
 /** Total PUT attempts `syncOnce` makes before giving up on a persistently
@@ -444,7 +479,7 @@ export class SyncPushConflictError extends Error {
 }
 
 interface PullMergeRestorePass {
-  mergedDump: DumpV9
+  mergedDump: DumpV10
   etag: string | null
   pulled: boolean
   merged: boolean
@@ -467,8 +502,8 @@ async function pullMergeRestore(
   const local = await backup.dump()
 
   const mergedTables = remote ? mergeDumpTables(local.tables, remote.tables, now) : local.tables
-  const mergedDump: DumpV9 = {
-    version: 9,
+  const mergedDump: DumpV10 = {
+    version: 10,
     exportedAt: now,
     meta: { ...local.meta, rowCounts: rowCounts(mergedTables) },
     tables: mergedTables,
@@ -492,26 +527,78 @@ async function pullMergeRestore(
 }
 
 /**
+ * `'push-only'`'s one deliberate exception to "local replaces canonical":
+ * daemon-appended sensor readings. The sync daemon's `POST /readings`
+ * (`reading-ingest.ts`) appends rows straight to CANONICAL between this
+ * device's passes — a push-only device never pulls them down, so they may
+ * exist NOWHERE else, and a pure local-over-canonical PUT would permanently
+ * destroy them. Graft semantics — local stays canonical for everything the
+ * USER authors:
+ *
+ *  - a canonical-only reading (id absent locally) is carried into the
+ *    outgoing dump — via `mergeState`, the exact union + tombstone
+ *    suppression the two-way merge runs for this table, never a second
+ *    hand-rolled union. Local rows win any shared id (a reading's `at` is
+ *    immutable, so shared ids tie and mergeState's tie rule keeps local).
+ *  - a locally-TOMBSTONED reading stays dead (the user deleted it here, and
+ *    push-only is authoritative for user intent) — mergeState's normal
+ *    at-or-before-`deletedAt` suppression, driven by the LOCAL tombstone set.
+ *  - batch-missing edge: a grafted reading whose `batchId` has no batch in
+ *    the OUTGOING dump (push-only publishes local batches only — e.g. the
+ *    batch was deleted locally) would be an instant orphan on canonical
+ *    (doctor C3, no UI to remove it). Dropped instead of grafted, surfaced as
+ *    `orphanReadingsDropped` on the SyncResult.
+ */
+function graftDaemonReadings(
+  local: DumpV10,
+  canonical: SyncPayload | null,
+): { outgoing: DumpV10; orphanReadingsDropped: number } {
+  const localReadings = local.tables.readings ?? []
+  const canonicalReadings = canonical?.tables.readings ?? []
+  if (canonicalReadings.length === 0) return { outgoing: local, orphanReadingsDropped: 0 }
+
+  const readingTombstones = bucketByTable(local.tables.rowTombstones ?? []).get('readings')
+  const union = mergeState(localReadings, canonicalReadings, readingTombstones)
+
+  const localIds = new Set(localReadings.map((r) => r.id))
+  const outgoingBatchIds = new Set((local.tables.batches ?? []).map((b) => b.id))
+  const readings = union.filter((r) => localIds.has(r.id) || outgoingBatchIds.has(r.batchId))
+
+  const tables = { ...local.tables, readings }
+  return {
+    outgoing: { ...local, meta: { ...local.meta, rowCounts: rowCounts(tables) }, tables },
+    orphanReadingsDropped: union.length - readings.length,
+  }
+}
+
+/**
  * `'push-only'` pass: publish local state as the new canonical without ever
- * merging or restoring remote data down. The initial `pull()` exists ONLY to
- * observe the current etag for the If-Match precondition (the daemon has no
- * HEAD/etag-only endpoint; the pulled payload is deliberately discarded). A
- * 412 retry does NOT re-pull — the rejection itself surfaces the CURRENT etag
- * (`currentEtag`, mirroring the daemon's 412 `ETag` header) — but it DOES
- * re-dump local state, for the same TOCTOU reason every other retry path here
- * re-dumps: a local write landing during the network round-trip must be
- * included, never clobbered by retrying a stale dump.
+ * merging or restoring remote data down — EXCEPT daemon-appended readings,
+ * which are grafted into the outgoing dump before every PUT (see
+ * `graftDaemonReadings` above; a pure overwrite would permanently destroy
+ * them). The initial `pull()` therefore serves double duty: it observes the
+ * current etag for the If-Match precondition (the daemon has no
+ * HEAD/etag-only endpoint) AND supplies the canonical state the graft reads.
+ * A 412 retry RE-PULLS rather than trusting the rejection's `currentEtag`
+ * alone — the winning write is often the daemon ingesting a reading, and the
+ * rejection surfaces the winning etag but not the winning STATE, which holds
+ * exactly the reading the retry must preserve (re-observing etag + payload as
+ * a pair also keeps them coherent if yet another write lands meanwhile).
+ * Every attempt also re-dumps local state, for the same TOCTOU reason every
+ * other retry path here re-dumps: a local write landing during the network
+ * round-trip must be included, never clobbered by retrying a stale dump.
  */
 async function pushOnly(
   transport: SyncTransport,
   backup: SyncBackup,
   now: string,
 ): Promise<SyncResult> {
-  let { etag } = await transport.pull()
+  let { payload: canonical, etag } = await transport.pull()
 
   for (let attempt = 1; ; attempt++) {
     const local = await backup.dump()
-    const result: SyncPushResult = await transport.push(local as SyncPayload, etag)
+    const { outgoing, orphanReadingsDropped } = graftDaemonReadings(local, canonical)
+    const result: SyncPushResult = await transport.push(outgoing as SyncPayload, etag)
 
     if (result.ok) {
       return {
@@ -519,12 +606,13 @@ async function pushOnly(
         pushed: true,
         merged: false,
         lastSyncAt: now,
-        counts: rowCounts(local.tables),
+        counts: rowCounts(outgoing.tables),
+        orphanReadingsDropped,
       }
     }
 
     if (result.status === 412 && attempt < MAX_PUSH_ATTEMPTS) {
-      etag = result.currentEtag // what actually won — retry against it
+      ;({ payload: canonical, etag } = await transport.pull()) // fresh etag + STATE, as a pair
       continue
     }
 

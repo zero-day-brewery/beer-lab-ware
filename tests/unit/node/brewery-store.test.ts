@@ -1,19 +1,21 @@
 /**
- * Node brewery-store — DumpV9 migration + ledger-invariant guard + PUT
+ * Node brewery-store — DumpV10 migration + ledger-invariant guard + PUT
  * generation rotation.
  *
  * Covers the Track B back-end requirements: the file store round-trips a real
- * client DumpV9 (incl. the `yeastLots` + `seedTombstones` + `rowTombstones`
- * tables + `meta`), still reads older v1..v6 dumps (newer tables → empty), the exported
- * `assertLedgerInvariant` rejects a dump whose cached `amount` diverges from its
- * ledger (`amount === Σ deltas`), and `rotateGenerations` snapshots + prunes the
- * `.bak` history the sync daemon keeps before each PUT overwrite.
+ * client DumpV10 (incl. the `yeastLots` + `seedTombstones` + `rowTombstones` +
+ * `deviceLinks` tables + `meta`), still reads older v1..v6 dumps (newer tables
+ * → empty), the exported `assertLedgerInvariant` rejects a dump whose cached
+ * `amount` diverges from its ledger (`amount === Σ deltas`), and
+ * `rotateGenerations` snapshots + prunes the `.bak` history the sync daemon
+ * keeps before each PUT overwrite.
  */
 
 import { mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import type { DeviceLink } from '@/lib/brewing/types/device-link'
 import type { YeastLot } from '@/lib/brewing/types/yeast-lot'
 import {
   assertLedgerInvariant,
@@ -48,20 +50,30 @@ const yeastLot: YeastLot = {
   schemaVersion: 1,
 }
 
-describe('brewery-store DumpV9', () => {
-  it('writes the current v9 envelope with a meta sidecar', async () => {
+const deviceLink: DeviceLink = {
+  id: '44444444-4444-4444-8444-444444444444',
+  deviceKey: 'tilt:RED',
+  batchId: '77777777-7777-4777-8777-777777777777',
+  createdAt: '2026-07-01T00:00:00.000Z',
+  updatedAt: '2026-07-01T00:00:00.000Z',
+  schemaVersion: 1,
+}
+
+describe('brewery-store DumpV10', () => {
+  it('writes the current v10 envelope with a meta sidecar', async () => {
     const file = await tmpFile()
     await saveBrewery(file, emptyCollections(), '2026-07-09T00:00:00.000Z')
     const raw = JSON.parse(await readFile(file, 'utf8'))
     expect(raw.version).toBe(CURRENT_DUMP_VERSION)
-    expect(raw.version).toBe(9)
-    expect(raw.meta).toMatchObject({ dumpVersion: 9, schemaVersion: 1 })
+    expect(raw.version).toBe(10)
+    expect(raw.meta).toMatchObject({ dumpVersion: 10, schemaVersion: 1 })
     expect(raw.tables.yeastLots).toEqual([])
     expect(raw.tables.seedTombstones).toEqual([])
     expect(raw.tables.rowTombstones).toEqual([])
+    expect(raw.tables.deviceLinks).toEqual([])
   })
 
-  it('round-trips a client DumpV9 including yeastLots + seedTombstones + rowTombstones', async () => {
+  it('round-trips a client DumpV10 including yeastLots + seedTombstones + rowTombstones + deviceLinks', async () => {
     const file = await tmpFile()
     const c = fixtureCollections()
     c.seedTombstones = [{ id: 'seed-recipe-1' }]
@@ -69,6 +81,7 @@ describe('brewery-store DumpV9', () => {
     c.rowTombstones = [
       { id: 'deleted-recipe-1', table: 'recipes', deletedAt: '2026-06-01T00:00:00.000Z' },
     ]
+    c.deviceLinks = [deviceLink]
     await saveBrewery(file, c)
     const back = await loadBrewery(file)
     expect(back.seedTombstones).toEqual([{ id: 'seed-recipe-1' }])
@@ -77,6 +90,7 @@ describe('brewery-store DumpV9', () => {
     expect(back.rowTombstones).toEqual([
       { id: 'deleted-recipe-1', table: 'recipes', deletedAt: '2026-06-01T00:00:00.000Z' },
     ])
+    expect(back.deviceLinks).toEqual([deviceLink])
     expect(back.recipes).toHaveLength(c.recipes.length)
   })
 
@@ -91,15 +105,34 @@ describe('brewery-store DumpV9', () => {
     expect(c.yeastLots).toEqual([])
     expect(c.seedTombstones).toEqual([])
     expect(c.rowTombstones).toEqual([])
+    expect(c.deviceLinks).toEqual([])
     expect(c.recipes).toEqual([])
   })
 
+  it('still reads a v9 dump that predates deviceLinks (defaults to empty)', async () => {
+    const file = await tmpFile()
+    const c = fixtureCollections()
+    await writeFile(
+      file,
+      JSON.stringify({
+        version: 9,
+        exportedAt: '2026-07-01T00:00:00.000Z',
+        meta: { dumpVersion: 9, dbVersion: 9, rowCounts: {}, schemaVersion: 1 },
+        tables: c,
+      }),
+      'utf8',
+    )
+    const back = await loadBrewery(file)
+    expect(back.deviceLinks).toEqual([])
+    expect(back.recipes).toHaveLength(c.recipes.length)
+  })
+
   it('rejects an unsupported (too-new) version', () => {
-    expect(() => parseEnvelope({ version: 10, tables: {} })).toThrow(/Unsupported/)
+    expect(() => parseEnvelope({ version: 11, tables: {} })).toThrow(/Unsupported/)
   })
 
   it('exports SUPPORTED_VERSIONS matching the versions parseEnvelope accepts', () => {
-    expect(SUPPORTED_VERSIONS).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
+    expect(SUPPORTED_VERSIONS).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
     for (const v of SUPPORTED_VERSIONS) {
       expect(() => parseEnvelope({ version: v, tables: {} })).not.toThrow()
     }

@@ -1,10 +1,10 @@
 # Beer-Lab-Ware sync origin — Caddy reverse-proxy template
 #
-# Serves the PWA static export AND reverse-proxies /state to the sync daemon on
-# the SAME origin (so HttpSyncTransport.baseUrl == window.location.origin — no
-# CORS). Prefer nginx or Traefik instead? The shape is the same: terminate TLS,
-# proxy /state to the daemon's loopback port, serve the static export for
-# everything else.
+# Serves the PWA static export AND reverse-proxies /state + /readings to the
+# sync daemon on the SAME origin (so HttpSyncTransport.baseUrl ==
+# window.location.origin — no CORS). Prefer nginx or Traefik instead? The
+# shape is the same: terminate TLS, proxy /state + /readings to the daemon's
+# loopback port, serve the static export for everything else.
 #
 # Replace <your-domain> with your own domain (or LAN hostname) and
 # <your-server-ip> with the IP this host should bind. Caddy issues and renews
@@ -41,8 +41,12 @@
 	# Sync API → the local daemon (mandatory Bearer auth is enforced IN the
 	# daemon, not here; GET /health is the daemon's own unauthenticated
 	# liveness probe for uptime monitoring). 127.0.0.1 only; the daemon never
-	# binds a public interface.
+	# binds a public interface. /readings is the automatic sensor-ingest route
+	# (see docs/sensors.md) — same daemon, same auth posture as /state.
 	handle /state* {
+		reverse_proxy 127.0.0.1:8787
+	}
+	handle /readings* {
 		reverse_proxy 127.0.0.1:8787
 	}
 	handle /health {

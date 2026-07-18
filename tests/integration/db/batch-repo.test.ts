@@ -4,6 +4,7 @@ import { B40PRO_PROFILE } from '@/lib/brewing/defaults/b40pro'
 import type { Batch } from '@/lib/brewing/types/batch'
 import type { Recipe } from '@/lib/brewing/types/recipe'
 import { makeBatchRepo } from '@/lib/db/repos/batch'
+import { makeDeviceLinksRepo } from '@/lib/db/repos/device-links'
 import { BrewDB } from '@/lib/db/schema'
 
 const recipe: Recipe = {
@@ -116,6 +117,46 @@ describe('batchRepo', () => {
     const found = await repo.getByBoard('f2')
     expect(found?.batchNo).toBe(5)
     expect(await repo.getByBoard('f4')).toBeNull()
+  })
+
+  it('delete() cascade-tombstones any deviceLinks assigned to the batch, in the SAME transaction (mirrors inventory→ledger cascade)', async () => {
+    const b = batch('11111111-1111-4111-8111-111111111111', 1, 'in-progress')
+    await repo.save(b)
+    const link = await makeDeviceLinksRepo(db).assign('tilt:RED', b.id)
+
+    await repo.delete(b.id)
+
+    expect(await db.batches.get(b.id)).toBeUndefined()
+    expect(await db.deviceLinks.get(link.id)).toBeUndefined()
+
+    const batchTombstone = await db.rowTombstones.get(b.id)
+    expect(batchTombstone?.table).toBe('batches')
+
+    const linkTombstone = await db.rowTombstones.get(link.id)
+    expect(linkTombstone).toBeDefined()
+    expect(linkTombstone?.table).toBe('deviceLinks')
+    expect(Number.isNaN(Date.parse(linkTombstone?.deletedAt ?? ''))).toBe(false)
+  })
+
+  it('delete() on a batch with NO linked devices is a no-op on deviceLinks/its tombstones', async () => {
+    const b = batch('22222222-2222-4222-8222-222222222222', 2)
+    await repo.save(b)
+    await repo.delete(b.id)
+    expect(await db.deviceLinks.toArray()).toEqual([])
+    const tombstones = await db.rowTombstones.where('table').equals('deviceLinks').toArray()
+    expect(tombstones).toEqual([])
+  })
+
+  it('delete() never cascades a device link belonging to a DIFFERENT batch', async () => {
+    const kept = batch('33333333-3333-4333-8333-333333333333', 3, 'in-progress')
+    const deleted = batch('44444444-4444-4444-8444-444444444444', 4, 'in-progress')
+    await repo.save(kept)
+    await repo.save(deleted)
+    const keptLink = await makeDeviceLinksRepo(db).assign('tilt:GREEN', kept.id)
+
+    await repo.delete(deleted.id)
+
+    expect(await db.deviceLinks.get(keptLink.id)).toEqual(keptLink)
   })
 
   it('getByBoard() resolves each vessel to ITS OWN batch when two brews run concurrently', async () => {

@@ -44,14 +44,14 @@ function recipe(over: Partial<Recipe> & { id: string }): Recipe {
 }
 
 describe('backup dump/restore — DumpV9 rowTombstones', () => {
-  it('dump() is version 9 and includes rowTombstones', async () => {
+  it('dump() carries rowTombstones forward (introduced in v9, unchanged in the current envelope)', async () => {
     const db = freshDb()
     const id = crypto.randomUUID()
     await db.recipes.put(recipe({ id }))
     await makeRecipeRepo(db).delete(id)
 
     const dumped = await makeBackupService(db).dump()
-    expect(dumped.version).toBe(9)
+    expect(dumped.version).toBe(10)
     expect(dumped.tables.rowTombstones).toHaveLength(1)
     expect(dumped.tables.rowTombstones[0]).toMatchObject({ id, table: 'recipes' })
   })

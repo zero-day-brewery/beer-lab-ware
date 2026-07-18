@@ -26,6 +26,7 @@ describe('BrewDB schema', () => {
       'batches',
       'brewSessions',
       'brewTimers',
+      'deviceLinks',
       'equipmentProfiles',
       'gearItems',
       'ingredients',
@@ -41,9 +42,9 @@ describe('BrewDB schema', () => {
     ])
   })
 
-  it('is at version 11 (after v11 added rowTombstones)', async () => {
+  it('is at version 12 (after v12 added deviceLinks)', async () => {
     await db.open()
-    expect(db.verno).toBe(11)
+    expect(db.verno).toBe(12)
   })
 
   it('can put and get a settings record', async () => {
@@ -124,7 +125,7 @@ describe('BrewDB v6 schema (readings)', () => {
       updatedAt: '2026-07-04T12:00:00.000Z',
       schemaVersion: 1,
     })
-    expect(db.verno).toBe(11)
+    expect(db.verno).toBe(12)
     expect(await db.batches.count()).toBe(1)
     const kept = await db.batches.get('77777777-7777-4777-8777-777777777777')
     expect(kept?.batchNo).toBe(42)
@@ -153,7 +154,7 @@ describe('BrewDB v7 schema (stock ledger)', () => {
     expect(indexed).toContain('[inventoryItemId+at]')
   })
 
-  it('opens at version 11', () => {
-    expect(db.verno).toBe(11)
+  it('opens at version 12', () => {
+    expect(db.verno).toBe(12)
   })
 })

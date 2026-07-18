@@ -36,6 +36,7 @@ const EXPECTED_TABLES = [
   'seedTombstones',
   'yeastLots',
   'rowTombstones',
+  'deviceLinks',
 ].sort()
 
 describe('sync surface secret-exclusion', () => {

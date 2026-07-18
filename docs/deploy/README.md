@@ -9,7 +9,11 @@ downloadable brewery assistant** — this back-end is the "step further" for per
 > **Sync now** (two-way by default; pull-only / push-only under Advanced). The
 > **Diagnostics** page shows live reachability, dump-version compatibility, and an
 > auth check against this daemon. If the app is served from a DIFFERENT origin than
-> the daemon, see "Cross-origin apps (SYNC_ALLOWED_ORIGINS)" below.
+> the daemon, see "Cross-origin apps (SYNC_ALLOWED_ORIGINS)" below. This daemon ALSO
+> accepts automatic hydrometer/sensor readings (Tilt/iSpindel/RAPT/generic) at
+> `POST /readings` — link a device to a batch from **Settings → Sensor devices**,
+> then **Sync now** (the link reaches the daemon on the app's next sync push); see
+> [`docs/sensors.md`](../sensors.md) for the full device-format reference.
 
 > These are TEMPLATES. Swap in your own domain, server IP, storage paths, and users
 > before deploying.
@@ -26,6 +30,18 @@ for it. The daemon won't even start without at least one token hash configured
 
 The one exception is `GET /health` (see below) — deliberately unauthenticated, and it
 never returns brewery data, so it isn't a hole in the above.
+
+Tokens come in TWO scopes. **FULL tokens** (`SYNC_TOKEN_HASHES`) work on `/state` and
+`POST /readings` alike — give them only to devices you'd trust with the whole brewery
+(your own phones/laptops running the app). **INGEST-scoped tokens**
+(`SYNC_INGEST_TOKEN_HASHES`, optional) work ONLY on `POST /readings`; presented on
+`/state` they get a 401 indistinguishable on the wire from a bad token (the
+server-side audit line DOES distinguish, so a misconfigured bridge stays debuggable).
+Give these to sensor bridges: TiltBridge serves its whole config — token included —
+on an unauthenticated LAN page, and ESP-class firmware gives its stored secrets up to
+anyone with a USB cable and a flash dump, so the token a bridge holds should cap out
+at "append one rate-limited reading row", never "read or destructively overwrite the
+entire brewery". See "Token lifecycle" below.
 
 ## Optimistic concurrency is MANDATORY on every PUT — ETag / If-Match
 
@@ -60,28 +76,45 @@ canonical until it happened to sync again.
 - **`src/lib/node/sync-server.ts`** — the daemon.
   - `GET/PUT /state` — mandatory hashed Bearer auth (`timingSafeEqual`), 204-when-empty,
     envelope + ledger-invariant validation on PUT, atomic write behind a mutex, binds
-    127.0.0.1. A rejected (401) request logs one stderr line — timestamp, remote
-    address, path — and NEVER the token or any part of the Authorization header.
+    127.0.0.1. A rejected (401) request logs one stderr line — timestamp, SOCKET peer
+    address, path, the route's required token scope, and a material-free
+    classification of what was presented (`X-Forwarded-For` is client-controlled, so
+    it appears only as a labeled `untrusted-xff=` extra, never as the primary
+    address) — and NEVER the token or any part of the Authorization header.
   - `PUT /state` also requires optimistic-concurrency `If-Match` (see above) — `428`
     when absent, `412` when stale, both checked atomically with the write.
+  - `POST /readings` — automatic hydrometer/sensor ingestion (Tilt/iSpindel/RAPT/
+    generic). Same mandatory Bearer auth (full tokens AND ingest-scoped tokens — the
+    only route the latter work on), same CORS rules, rate-limited per device
+    (`SYNC_INGEST_MIN_INTERVAL_S`, see below), a tighter fixed 256 KB body cap, and
+    runs under the SAME write mutex as `PUT /state` — but never rotates `.bak`
+    generations (see below). See [`docs/sensors.md`](../sensors.md) for the full
+    device-format reference, the Web Bluetooth reality check, and how to link a
+    device to a batch.
   - `GET /health` — **unauthenticated**, `200 { ok, daemonVersion, supportedDumpVersions }`,
     never reads or leaks brewery data. For uptime monitoring (see below).
   - Before each `PUT` overwrites the canonical file, the prior generation is
-    snapshotted to a `.bak` (`SYNC_KEEP_GENERATIONS`, see below) — independent of, and
-    without weakening, the atomic temp+rename of the write itself.
-- **`src/lib/node/brewery-store.ts`** — advanced to DumpV9 (matches the client, incl.
-  `rowTombstones` for the sync merge's deletion tombstones) + the
-  `assertLedgerInvariant` guard + `rotateGenerations` (the `.bak` snapshot/prune logic).
+    snapshotted to a `.bak` (`SYNC_KEEP_GENERATIONS`, see below) — independent of,
+    and without weakening, the atomic temp+rename of the write itself. An accepted
+    `POST /readings` append deliberately does NOT rotate — see "Generation backups"
+    below.
+- **`src/lib/node/brewery-store.ts`** — advanced to DumpV10 (matches the client, incl.
+  `rowTombstones` for the sync merge's deletion tombstones and `deviceLinks` for
+  sensor-device→batch assignments) + the `assertLedgerInvariant` guard +
+  `rotateGenerations` (the `.bak` snapshot/prune logic).
+- **`src/lib/node/reading-ingest.ts`** — the pure device-format adapters + device-link
+  resolution + rate limiter `POST /readings` wraps. See
+  [`docs/sensors.md`](../sensors.md).
 - **`public/sw.js`** — `/state` is never cached (would poison pulls).
-- Tests: `tests/unit/node/{brewery-store,sync-server,sync-secret-exclusion}.test.ts`,
+- Tests: `tests/unit/node/{brewery-store,sync-server,sync-secret-exclusion,reading-ingest}.test.ts`,
   `tests/unit/ui/sw-state-bypass.test.ts`.
 
 ## Files here
 | File | Goes to | Purpose |
 |---|---|---|
-| `Caddyfile` | `/etc/caddy/Caddyfile` | Serve `out/` + reverse-proxy `/state` and `/health`, plus baseline security headers |
+| `Caddyfile` | `/etc/caddy/Caddyfile` | Serve `out/` + reverse-proxy `/state`, `/readings`, and `/health`, plus baseline security headers |
 | `beer-lab-sync.service` | `/etc/systemd/system/` | Run the pre-built daemon bundle (`enable --now`) |
-| `sync.env.example` | `/etc/beer-lab-ware/sync.env` (0600) | `BREWERY_FILE`, `SYNC_TOKEN_HASHES`, `SYNC_PORT`, `SYNC_KEEP_GENERATIONS`, `SYNC_ALLOWED_ORIGINS` |
+| `sync.env.example` | `/etc/beer-lab-ware/sync.env` (0600) | `BREWERY_FILE`, `SYNC_TOKEN_HASHES`, `SYNC_INGEST_TOKEN_HASHES`, `SYNC_PORT`, `SYNC_KEEP_GENERATIONS`, `SYNC_ALLOWED_ORIGINS`, `SYNC_INGEST_MIN_INTERVAL_S` |
 
 ## Building the daemon
 
@@ -125,7 +158,7 @@ the server (or by your CI) from the checked-out source.
 
    ```bash
    curl -s https://<your-domain>/health
-   # expect: 200 {"ok":true,"daemonVersion":"0.1.0","supportedDumpVersions":[1,2,3,4,5,6,7,8,9]}
+   # expect: 200 {"ok":true,"daemonVersion":"0.1.0","supportedDumpVersions":[1,2,3,4,5,6,7,8,9,10]}
 
    curl -i -H "Authorization: Bearer <your-token>" https://<your-domain>/state
    # expect: 204 No Content before the first push (with `etag: "empty"`); 401 without/with a bad token
@@ -179,6 +212,18 @@ plaintext token (out of band — never over an unauthenticated channel). The tok
 lives only in the device's local storage; it is never a synced/backed-up field (see
 `tests/unit/node/sync-secret-exclusion.test.ts`).
 
+**Ingest-scoped tokens for sensor bridges** (`SYNC_INGEST_TOKEN_HASHES`, optional):
+generate exactly the same way, but append the hash to `SYNC_INGEST_TOKEN_HASHES`
+instead and give the plaintext to the bridge (TiltBridge / iSpindel / your RAPT
+script). That token works ONLY on `POST /readings` — on `/state` it 401s like any
+bad token — so a bridge that leaks it (TiltBridge's unauthenticated LAN config page,
+an ESP flash dump) gives up "append one rate-limited reading row", not your whole
+brewery. Rotation and immediate revocation work exactly like the full-token list
+above, against this variable instead. One sharp edge: if the variable is SET but
+contains no valid sha256-hex hash (e.g. the untrimmed-`shasum` mistake above), the
+daemon refuses to start — a misconfiguration should fail loudly, not silently lock a
+bridge out.
+
 **Rotate a token** (e.g. a device was lost, or you rotate on a schedule):
 1. Generate a NEW token + hash as above.
 2. Add the new hash to `SYNC_TOKEN_HASHES` **alongside** the old one (comma-separated) —
@@ -222,9 +267,9 @@ Behavior when set:
   response to that page. (Non-browser clients like curl are unaffected either way;
   auth is what actually gates data.)
 - `OPTIONS` preflight → `204` **without auth** (browsers send preflights without
-  credentials by design), advertising `GET,PUT,OPTIONS`, the headers
-  `Authorization,Content-Type,If-Match`, and a 24 h `Access-Control-Max-Age`. A
-  preflight never reads or returns brewery data.
+  credentials by design), advertising `GET,PUT,OPTIONS` (`POST,OPTIONS` on
+  `/readings`), the headers `Authorization,Content-Type,If-Match`, and a 24 h
+  `Access-Control-Max-Age`. A preflight never reads or returns brewery data.
 - **Auth is never relaxed:** an allowlisted origin still gets `401` on `/state`
   without a valid Bearer token. CORS only opens the browser's origin boundary; the
   token stays the gate.
@@ -264,6 +309,54 @@ applies — a device with newer local changes than the restored generation will 
 them back in on its next `syncOnce`, so a true rollback may also require clearing or
 overriding local state on each device; this restores the SERVER's canonical copy).
 
+An accepted `POST /readings` (see below) deliberately does **NOT** rotate
+generations. Generations exist to survive DESTRUCTIVE writes — a bad or
+fat-fingered `PUT /state` replacing the whole canonical file — and an ingest is an
+additive append of one reading row. If ingests rotated too, a single sensor posting
+at the 60-second rate-limit floor would flush the entire recovery window
+(keep=10 × 60 s ≈ 10 minutes) with near-identical snapshots, destroying this
+disaster-recovery path exactly when a destructive PUT would need it, while
+protecting against nothing destructive.
+
+## Automatic sensor ingestion (`POST /readings`)
+
+Full device-format reference, linking a device to a batch, and the "why not Web
+Bluetooth" design rationale live in **[`docs/sensors.md`](../sensors.md)** — this
+section only covers the daemon-side knobs.
+
+- **Auth + CORS**: identical posture to `/state` — mandatory Bearer token, same
+  opt-in `SYNC_ALLOWED_ORIGINS` allowlist when set — with one deliberate widening:
+  ingest-scoped tokens (`SYNC_INGEST_TOKEN_HASHES`, see "Token lifecycle" above)
+  are accepted HERE and nowhere else. Give bridges an ingest token, never a full
+  one.
+- **Body**: JSON, or `application/x-www-form-urlencoded` (the Tilt app's cloud-URL
+  convention — see [`docs/sensors.md`](../sensors.md)). Capped at a fixed
+  **256 KB** — real sensor payloads are under 2 KB; `/state`'s 64 MB
+  whole-brewery allowance does not apply here. Beyond the cap → `413`.
+- **Rate limiting** (`SYNC_INGEST_MIN_INTERVAL_S`, default **60** seconds, `0`
+  disables): at most one ACCEPTED ingest per device every N seconds — a device
+  posting faster gets `429 { error: "rate limited", retryAfterS }`, enforced
+  authoritatively under the write mutex (a cheap pre-mutex check keeps the obvious
+  cases off disk; concurrent same-device posts can't slip past it). Cheap,
+  in-memory, per-daemon-process (resets on restart) — a floor on abuse for a
+  write endpoint that may be reachable from the internet, not a durable quota.
+- **No generation rotation**: an accepted ingest appends atomically under the same
+  write mutex as `PUT /state` but never rotates `.bak` generations — see
+  "Generation backups" above for why.
+- **Unlinked device → `202`, nothing persisted.** Link it in **Settings → Sensor
+  devices** using the `deviceKey` the response reports, **then run `Settings →
+  Sync → Sync now`** — the link lives in the app's local database and reaches this
+  daemon only when the app pushes state; until that sync lands, `/readings` keeps
+  answering `202 unlinked`.
+
+```bash
+curl -i -X POST https://<your-domain>/readings \
+  -H "Authorization: Bearer <your-token>" -H "Content-Type: application/json" \
+  -d '{"deviceKey":"tilt:RED","gravity":1.042,"tempC":19.5}'
+# 202 {"ok":true,"status":"unlinked","deviceKey":"tilt:RED"} before you link it in
+# Settings → Sensor devices, or 200 {"ok":true,"status":"linked",...} after.
+```
+
 ## Uptime monitoring (`GET /health`)
 
 `GET /health` is unauthenticated by design (no Bearer token needed) and never reads or
@@ -273,7 +366,7 @@ Healthchecks.io, a Caddy/nginx-level probe, your own cron+curl) directly at
 
 ```bash
 curl -s https://<your-domain>/health
-# {"ok":true,"daemonVersion":"0.1.0","supportedDumpVersions":[1,2,3,4,5,6,7,8,9]}
+# {"ok":true,"daemonVersion":"0.1.0","supportedDumpVersions":[1,2,3,4,5,6,7,8,9,10]}
 ```
 
 `daemonVersion` is the running daemon's `package.json` version (useful for confirming a

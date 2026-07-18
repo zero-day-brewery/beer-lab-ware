@@ -39,6 +39,7 @@ any web server — or one-click deploy:
 - **Brewfather migration** — import your Brewfather JSON export (recipes, batches with fermentation readings, and ingredient inventory) with a dry-run preview; re-importing never duplicates.
 - **Brew flow** — a guided, step-by-step brew day that walks you through mash, boil, and additions in order.
 - **Fermentation logging + charts** — log gravity and temperature readings over the course of a fermentation and see them plotted.
+- **Automatic sensor readings** *(self-hosted sync tier)* — link a Tilt, iSpindel, RAPT Pill, or any script to a batch and the sync daemon logs its readings for you, no typing required. See [`docs/sensors.md`](./docs/sensors.md).
 - **Inventory** — track fermentables, hops, yeast, and misc ingredients, and draw them down as you brew.
 - **Yeast Bank** — a harvest → repitch lineage tracker: capture a slurry harvest from a batch, follow it through generations, and see viability decay over time.
 - **BYO-AI brewing companion** — an optional AI assistant that can answer questions about your recipes and batches and propose changes for you to review. Bring your own API key; see below.
@@ -60,6 +61,7 @@ The AI companion is opt-in. Bring your own API key — Anthropic or any OpenAI-c
 
 - **Local-only (default, for everyone):** your data lives in the browser's local database. No setup required.
 - **Multi-device sync (self-hosted):** end-to-end usable. Stand up the sync daemon on a server you control ([`docs/deploy/`](./docs/deploy/README.md) has the templates and runbook), then connect the app in **Settings → Sync**: enter the server URL (https required; http allowed only for localhost) and your per-device token, hit **Test connection**, and **Sync now**. The default mode is safe two-way sync (pull → merge → push, with deletion tombstones, deterministic conflict reconciliation, and ETag optimistic concurrency); an Advanced disclosure offers one-way modes — *pull only* ("phone follows the server") and *push only* ("this desktop is canonical"). **Diagnostics** shows live sync status: reachability, dump-version compatibility, token check, and the last sync outcome. The URL and token are stored only on the device — never in backups, never in the synced data itself.
+- **Automatic sensor readings, riding the same daemon:** the daemon that syncs your devices can also *receive* readings — point a Tilt (via TiltBridge/Tilt Pi), an iSpindel, a RAPT Pill (via a small bridge/script), or any script that speaks a documented generic JSON shape at `POST /readings`, link it to a batch in **Settings → Sensor devices**, and its readings log automatically with no typing. This is the architecturally honest reason a self-hosted tier exists at all: a static PWA has nowhere to receive an inbound push — an always-on daemon does. (A Web-Bluetooth-in-the-browser version of this was considered and rejected — the required Scanning API is flag-gated in Chrome and unimplemented in Safari; see [`docs/sensors.md`](./docs/sensors.md) for the full writeup.)
 
 Local-first is permanent: any sync or hosted tier will always be optional, and the app will always work fully with no account and no server.
 

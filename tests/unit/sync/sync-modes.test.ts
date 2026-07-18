@@ -170,7 +170,7 @@ describe("syncOnce mode: 'push-only'", () => {
     expect(localStrains).toEqual(['L-Strain'])
   })
 
-  it('retries a 412 with the etag the rejection surfaced (competing writer), re-dumping local', async () => {
+  it('re-pulls and retries a 412 (competing writer), re-dumping local and re-grafting daemon readings', async () => {
     const shared = new InMemorySyncTransport()
     const dbRemote = freshDb()
     await makeYeastLotsRepo(dbRemote).save(lot({ id: crypto.randomUUID(), strain: 'R-Strain' }))
@@ -208,8 +208,11 @@ describe("syncOnce mode: 'push-only'", () => {
     })
 
     expect(result.pushed).toBe(true)
-    // The retry used the CURRENT etag from the 412 — no extra pull needed.
-    expect(pullCount).toBe(1)
+    // The retry RE-PULLS canonical instead of blindly reusing the 412's
+    // currentEtag: the collision may have been a daemon reading ingested
+    // between attempts, and only a fresh pull lets push-only re-graft it
+    // before overwriting (the old retry-without-pull path erased it).
+    expect(pullCount).toBe(2)
     const canonical = await shared.pull()
     expect((canonical.payload?.tables.yeastLots ?? []).map((l) => l.strain)).toEqual(['L-Strain'])
   })

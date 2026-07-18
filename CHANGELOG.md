@@ -20,6 +20,103 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Automatic hydrometer/sensor reading ingestion** *(self-hosted sync tier)*.
+  The sync daemon now accepts `POST /readings` — link a Tilt (via
+  TiltBridge/Tilt Pi/the Tilt app's cloud-URL feature), an iSpindel, a RAPT
+  Pill (via a small bridge/script), or any script speaking a documented
+  generic JSON shape to a batch (**Settings → Sensor devices**, new
+  `deviceLinks` table) and its readings log automatically — no typing. This
+  is the architecturally honest reason a self-hosted tier exists: a static
+  PWA cannot listen for an inbound HTTP push (nothing to bind a port to); an
+  always-on daemon can. **Web Bluetooth reality check** (documented in full
+  in `docs/sensors.md` + `src/lib/node/reading-ingest.ts`): a "read a Tilt
+  directly in the browser" version of this was investigated and rejected —
+  reading a Tilt's iBeacon manufacturer-data advertisement requires the Web
+  Bluetooth *Scanning* API, which is experimental/flag-gated in Chrome and
+  wholly unimplemented in Safari/WebKit, so it can't be a shipped feature.
+  Device formats are auto-detected: iSpindel HTTP JSON (handles the
+  SG-vs-°Plato gravity ambiguity by plausibility, with a warning — and
+  REFUSES to guess at a value implausible in both units: a zero/negative/
+  >35 °P gravity is a 400, not laundered into a plausible-looking ~1.000 SG;
+  missing `temp_units` defaults to °C, the firmware default), the Brewfather
+  custom-stream shape (covers TiltBridge's and iSpindel's own "Brewfather"
+  HTTP targets in one adapter; parses the contract's `ph` field; a missing
+  `temp_unit` defaults to °C — Brewfather's own documented contract default,
+  with explicit C/F/K honored and any other unit an outright 400 naming it —
+  TiltBridge always sends an explicit `"F"`, so the honest default costs no
+  real sender anything), a Tilt "native" `Color`+`SG×1000` log shape (`Temp`
+  always read as °F — the stock-firmware default; this shape has no unit
+  field), and a generic `{ deviceKey, gravity, tempC, ph?, at? }` escape
+  hatch (RAPT Pill routes through this — no bespoke RAPT adapter; its actual
+  cloud API is pull-only OAuth2, not a webhook a hobbyist can point anywhere).
+  Wire tolerance matches the hardware that actually exists: every adapter
+  accepts numeric fields as JSON STRINGS (the real Tilt app / Tilt Pi
+  cloud-URL senders emit `{"Temp":"61.0","SG":"1.027"}`), and `/readings`
+  accepts `application/x-www-form-urlencoded` bodies (the Tilt app's
+  cloud-URL convention) alongside JSON — declared via Content-Type or sniffed
+  when a non-JSON body parses as a query string with a known sensor field.
+  Final values on every shape must pass shared plausibility bounds (gravity
+  0.9–1.2 SG, temp −10–110 °C, pH (0, 14]) — an implausible reading is a 400,
+  never a silently poisoned chart. Every adapter is EXPERIMENTAL: validated
+  against documented wire formats, not physical hardware. An unlinked device
+  gets `202 { status: 'unlinked', deviceKey }` and **persists nothing**
+  (deliberate — the app has no batch-less-reading view, so an orphan pool
+  would just be invisible data);
+  the same 202-and-persist-nothing treatment applies when a linked device's
+  batch has since been deleted (`{ status: 'batch-missing' }`) — the daemon
+  refuses a stale link as soon as the deletion has reached ITS canonical
+  copy. Honestly: it can only refuse what it can see — a batch deleted on a
+  device that hasn't synced yet leaves a propagation window in which the
+  daemon still appends; those lag-window readings are cleaned up at merge
+  time instead (readings of a batch that stayed tombstoned die with it —
+  a membership check, not a timestamp one, so a lag-ingested reading whose
+  `at` postdates the tombstone can't slip through as a permanent orphan).
+  A linked device's reading is appended with a content-addressed id (same
+  uuidv5-from-stable-fields technique as the Brewfather importer), so a
+  device retrying an identical POST **that carries its own timestamp**
+  upserts instead of duplicating — honestly, that's the generic
+  `{ deviceKey, ..., at? }` shape only; none of the three device-native
+  adapters (iSpindel, Tilt-native, Brewfather-stream) parse a payload
+  timestamp, so their retries mint a new row and the per-device rate limit
+  is the actual retry guard for those. Runs under the SAME write mutex and
+  atomic-write path as `PUT /state` — but deliberately NOT generation
+  rotation: `.bak` generations exist to survive destructive PUTs, and
+  rotating on every additive append would let one sensor at the 60 s
+  rate-limit floor flush the entire keep=10 recovery window in ~10 minutes —
+  and its write is SURGICAL: only `tables.readings` is touched
+  (append/upsert), every other table's rows (including any fields this app
+  doesn't know about), `meta`, and the stored envelope's `version` are
+  preserved byte-for-byte — a v9-stored file is never silently rewritten to
+  v10 by an ingest, and a hand-added field on some other row is never
+  stripped. Rate-limited per device (`SYNC_INGEST_MIN_INTERVAL_S`, default
+  60s, `0` disables); a cheap pre-mutex check keeps a clearly-rate-limited
+  request off disk, the authoritative re-check runs INSIDE the write mutex
+  right before the persist (the peek alone is a TOCTOU hole — N concurrent
+  same-device posts would all pass it before any records a hit), and the hit
+  is only recorded once a reading actually persists (a batch-missing/
+  unlinked/failed request never burns the device's slot). `/readings` also
+  gets its own fixed 256 KB body cap (vs `/state`'s whole-brewery 64 MB) and
+  an optional second token scope: INGEST-scoped tokens
+  (`SYNC_INGEST_TOKEN_HASHES`) are valid ONLY on `POST /readings` —
+  presented on `/state` they 401 indistinguishably on the wire from a bad
+  token (the server-side audit line does distinguish) — so a sensor bridge
+  that leaks its token (TiltBridge's unauthenticated LAN config page, an ESP
+  flash dump) gives up "append one rate-limited reading", not the whole
+  brewery. Linking is two-step by design: a link created in **Settings →
+  Sensor devices** lives in the app's local database and reaches the daemon
+  on the app's NEXT sync push (`Sync now`) — the docs state this in the
+  setup flow and the unlinked-202 path. The Settings card normalizes
+  hand-typed device keys toward the daemon-derived form (provider prefix
+  lowercased, Tilt colors uppercased, a key with no `:` rejected inline;
+  `ispindel:`/`rapt:`/`other:` identity case preserved — it's
+  case-sensitive), sorts in-progress batches first in the batch selectors
+  (complete/archived stay selectable, status-labeled), and its endpoint hint
+  tracks live edits to the sync server URL. Daemon-ingested readings flow to
+  devices on their next pull — and even `push-only` sync preserves them
+  (grafted into the published state instead of clobbered; see the sync-modes
+  entry below). The batch sheet's Fermentation Readings table shows a
+  colored source badge (Tilt/iSpindel/RAPT/sensor/manual) per row.
+  Full reference: [`docs/sensors.md`](./docs/sensors.md).
 - **Brewfather migration importer.** The Import page can now migrate a whole
   Brewfather brewery from its JSON export — recipes, batches (with recipe
   snapshots, measured OG/FG/volumes, brew dates, and fermentation readings),
@@ -95,11 +192,19 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
 - Sync modes (`syncOnce({ mode })`): `two-way` (default — pull → merge →
   snapshot+restore → push, unchanged), `pull-only` (pull + merge + snapshot +
   restore, NEVER pushes — including no first-push seeding of an empty store;
-  "phone follows"), and `push-only` (publish local state as canonical with full
-  If-Match handling incl. the empty-store bootstrap and 412-retry via the
-  rejection's surfaced etag; never merges or restores remote data down; "desktop is
-  canonical"). The Settings card defaults to two-way; the one-way modes sit behind
-  an Advanced disclosure with one-line explanations.
+  "phone follows"), and `push-only` ("desktop is canonical": publish local state
+  as canonical with full If-Match handling incl. the empty-store bootstrap; a 412
+  collision re-pulls etag + state as a PAIR before retrying, so a reading
+  ingested mid-push is preserved on the retry; never merges or restores remote
+  data into the local DB — with ONE carve-out: readings the sync daemon ingested
+  straight into canonical (`POST /readings`) are grafted into the published
+  state instead of destroyed, because a push-only device never pulls them down
+  so they may exist nowhere else. A locally-deleted (tombstoned) reading stays
+  dead — the graft never resurrects what the user deleted — and a grafted
+  reading whose batch is absent from the outgoing dump is dropped, surfaced as
+  `orphanReadingsDropped` on the sync result, rather than published as an
+  instant orphan). The Settings card defaults to two-way; the one-way modes sit
+  behind an Advanced disclosure with one-line explanations.
 - Sync daemon: **opt-in CORS** via `SYNC_ALLOWED_ORIGINS` (comma-separated EXACT
   origins — wildcards refuse to start, deliberately; see docs/deploy/README.md).
   Needed only when the app is served from a different origin than the daemon (e.g.
@@ -172,9 +277,13 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
   `SYNC_KEEP_GENERATIONS` (default 10, `0` disables), independent of the atomic
   temp+rename write itself. Restore-from-generation procedure documented in
   `docs/deploy/README.md`.
-- Sync daemon: a rejected (401) request now logs one stderr line — timestamp, remote
-  address (honors `X-Forwarded-For` behind a reverse proxy), and path — never any part
-  of the Authorization header or token.
+- Sync daemon: a rejected (401) request now logs one stderr line — timestamp, the
+  SOCKET peer address (`X-Forwarded-For` is client-controlled, so it is included
+  only as a JSON-quoted, explicitly-labeled `untrusted-xff=` extra, never as the
+  primary `remote=` field), path, the route's required token scope, and a
+  material-free classification of what was presented (absent / invalid / a valid
+  ingest-scoped token on a full-scope route) — never any part of the Authorization
+  header or token.
 - Sync protocol: optimistic concurrency (ETag / If-Match) on `/state`, closing a
   lost-update race — two devices pulling the same state and pushing concurrently could
   previously have the second push silently overwrite the first, with the first
@@ -219,6 +328,14 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
   regression in pressure math fails loudly instead of shipping.
 
 ### Changed
+- Backup envelope bumped to `DumpV10` (`DUMP_VERSION` 9→10; Dexie schema
+  v11→v12), additive only — a v12 Dexie DB and v1..v9 dumps migrate forward
+  losslessly (older dumps import with an empty `deviceLinks` set). New
+  synced table `deviceLinks` (sensor-device→batch assignments, see Added
+  above) merges + tombstones-on-delete exactly like every other state table.
+  **Self-hosters: upgrade the sync daemon before or together with the
+  app** — older daemons reject a v10 envelope; `GET /health`'s
+  `supportedDumpVersions` now advertises `[1..10]`.
 - Backup envelope bumped to `DumpV9` (`DUMP_VERSION` 8→9; Dexie schema v10→v11),
   additive only — a v10 Dexie DB and v1..v8 dumps migrate forward losslessly
   (older dumps import with an empty tombstone set). Self-hosters: upgrade the
@@ -239,6 +356,16 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
   `SYNC_KEEP_GENERATIONS`/restore-from-generation, and `/health` for uptime monitoring.
 
 ### Fixed
+- Fresh-install pantry seed items were written with `inventoryItems.put`
+  alone — no matching opening `stockTransaction` — so the doctor's C1 ledger
+  check (`amount === Σdeltas`) flagged every seeded pantry item on a
+  brand-new install (found during E4 QA on the sensor-ingestion work).
+  `seedDefaults` now writes each pantry item through the same atomic
+  item+opening-txn path (`stockTransactionsRepo.saveItemWithTxn`) the v7
+  ledger-migration backfill and the Brewfather importer use, so a fresh
+  install is doctor-clean from the very first launch. Existing installs are
+  untouched (idempotent re-seed skips rows that already exist) — the
+  doctor's existing C1 auto-fix already repairs those.
 - `docs/mcp.md` referenced a stale dump-envelope version (v6); the current
   envelope is v8.
 - `docs/deploy/sync.env.example`'s token-hash one-liner copied `shasum`'s raw output

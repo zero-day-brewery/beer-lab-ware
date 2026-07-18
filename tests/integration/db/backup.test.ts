@@ -25,7 +25,7 @@ describe('backup service', () => {
 
   it('dump() returns an object with all seven tables (v3 schema)', async () => {
     const dump = await backup.dump()
-    expect(dump.version).toBe(9)
+    expect(dump.version).toBe(10)
     expect(dump.tables).toHaveProperty('recipes')
     expect(dump.tables).toHaveProperty('equipmentProfiles')
     expect(dump.tables).toHaveProperty('ingredients')
@@ -207,7 +207,7 @@ describe('backup v4 (batches/sessions/timers)', () => {
 
   it('dump() is version 6 and includes the batches table', async () => {
     const dump = await backup.dump()
-    expect(dump.version).toBe(9)
+    expect(dump.version).toBe(10)
     expect(dump.tables).toHaveProperty('batches')
     expect(dump.tables).toHaveProperty('brewSessions')
     expect(dump.tables).toHaveProperty('brewTimers')
@@ -337,7 +337,7 @@ describe('backup v5 (fermentation readings)', () => {
 
   it('dump() is version 6 and includes the readings table', async () => {
     const dump = await backup.dump()
-    expect(dump.version).toBe(9)
+    expect(dump.version).toBe(10)
     expect(dump.tables).toHaveProperty('readings')
   })
 
@@ -408,7 +408,7 @@ describe('backup v6 (stock ledger)', () => {
 
   it('dump() is version 6 and includes the stockTransactions table', async () => {
     const dump = await backup.dump()
-    expect(dump.version).toBe(9)
+    expect(dump.version).toBe(10)
     expect(dump.tables).toHaveProperty('stockTransactions')
   })
 
@@ -468,5 +468,58 @@ describe('backup v6 (stock ledger)', () => {
     await expect(backup.restore(corrupt)).rejects.toThrow()
     // Pre-existing ledger row untouched — validation failed before any clear().
     expect(await db.stockTransactions.count()).toBe(1)
+  })
+})
+
+describe('backup v10 (device links)', () => {
+  let db: BrewDB
+  let backup: ReturnType<typeof makeBackupService>
+  beforeEach(async () => {
+    db = new BrewDB('test-backup-v10')
+    await db.open()
+    backup = makeBackupService(db)
+  })
+  afterEach(async () => {
+    db.close()
+    await BrewDB.delete('test-backup-v10')
+  })
+
+  const deviceLink = () => ({
+    id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+    deviceKey: 'tilt:RED',
+    batchId: '55555555-5555-4555-8555-555555555555',
+    createdAt: '2026-07-05T00:00:00.000Z',
+    updatedAt: '2026-07-05T00:00:00.000Z',
+    schemaVersion: 1 as const,
+  })
+
+  it('restoring a pre-deviceLinks V9 dump leaves the deviceLinks table untouched (no wipe)', async () => {
+    await db.deviceLinks.put(deviceLink())
+    await backup.restore({
+      version: 9,
+      exportedAt: new Date().toISOString(),
+      meta: { dumpVersion: 9, dbVersion: 11, schemaVersion: 1, rowCounts: {} },
+      tables: {
+        recipes: [],
+        equipmentProfiles: [],
+        ingredients: [],
+        settings: [],
+        inventoryItems: [],
+        gearItems: [],
+        waterProfiles: [],
+        batches: [],
+        brewSessions: [],
+        brewTimers: [],
+        readings: [],
+        stockTransactions: [],
+        seedTombstones: [],
+        yeastLots: [],
+        rowTombstones: [],
+      },
+    })
+    expect(await db.deviceLinks.count()).toBe(1)
+    expect((await db.deviceLinks.get('ffffffff-ffff-4fff-8fff-ffffffffffff'))?.deviceKey).toBe(
+      'tilt:RED',
+    )
   })
 })

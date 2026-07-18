@@ -6,8 +6,8 @@
  * reading db/repos/*.ts: recipe, batch, inventory (+ cascade to its ledger),
  * gear, water, readings, yeast-lots, session, equipment, ingredient, timer
  * (+ its session cascade), stock-transactions (cascade helper used
- * standalone). `seedTombstones` (a separate, older mechanism — see
- * inventory/gear/equipment repos) is untouched by this feature; verified
+ * standalone), device-links. `seedTombstones` (a separate, older mechanism —
+ * see inventory/gear/equipment repos) is untouched by this feature; verified
  * still-independent below.
  */
 import { afterEach, describe, expect, it } from 'vitest'
@@ -19,6 +19,7 @@ import type { Recipe } from '@/lib/brewing/types/recipe'
 import type { StockTransaction } from '@/lib/brewing/types/stock-transaction'
 import type { YeastLot } from '@/lib/brewing/types/yeast-lot'
 import { makeBatchRepo } from '@/lib/db/repos/batch'
+import { makeDeviceLinksRepo } from '@/lib/db/repos/device-links'
 import { makeEquipmentRepo } from '@/lib/db/repos/equipment'
 import { makeGearRepo } from '@/lib/db/repos/gear'
 import { makeIngredientRepo } from '@/lib/db/repos/ingredient'
@@ -305,6 +306,16 @@ describe('yeastLotsRepo.remove', () => {
     await makeYeastLotsRepo(db).remove(id)
     expect(await db.yeastLots.get(id)).toBeUndefined()
     await expectTombstoned(db, id, 'yeastLots')
+  })
+})
+
+describe('deviceLinksRepo.remove', () => {
+  it('tombstones the link', async () => {
+    const db = freshDb()
+    const link = await makeDeviceLinksRepo(db).assign('tilt:RED', crypto.randomUUID())
+    await makeDeviceLinksRepo(db).remove(link.id)
+    expect(await db.deviceLinks.get(link.id)).toBeUndefined()
+    await expectTombstoned(db, link.id, 'deviceLinks')
   })
 })
 

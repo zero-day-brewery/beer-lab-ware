@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { DurabilitySection } from '@/components/durability/durability-section'
 import { CompanionSection } from '@/components/settings/companion-section'
 import { DataSection } from '@/components/settings/data-section'
+import { DeviceLinksSection } from '@/components/settings/device-links-section'
 import { SyncSection } from '@/components/settings/sync-section'
 import { useTheme } from '@/components/shell/theme-provider'
 import type { GravityUnit, Settings, Theme, Units } from '@/lib/brewing/types/settings'
@@ -129,6 +130,8 @@ export function SettingsView() {
       <DataSection />
 
       <SyncSection />
+
+      <DeviceLinksSection />
     </div>
   )
 }

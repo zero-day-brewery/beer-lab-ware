@@ -68,7 +68,7 @@ describe('error-log', () => {
     await db.open()
     const d = getDiagnostics()
     expect(d.appVersion).toBe('0.0.0-dev')
-    expect(d.verno).toBe(11)
+    expect(d.verno).toBe(12)
     expect(typeof d.userAgent).toBe('string')
   })
 

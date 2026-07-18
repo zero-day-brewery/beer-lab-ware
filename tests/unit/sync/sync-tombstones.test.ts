@@ -16,7 +16,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { InventoryItem } from '@/lib/brewing/types/inventory'
 import type { Recipe } from '@/lib/brewing/types/recipe'
 import type { StockTransaction } from '@/lib/brewing/types/stock-transaction'
-import { type DumpV9, makeBackupService } from '@/lib/db/backup'
+import { type DumpV9, type DumpV10, makeBackupService } from '@/lib/db/backup'
+import { makeBatchRepo } from '@/lib/db/repos/batch'
+import { makeDeviceLinksRepo } from '@/lib/db/repos/device-links'
 import { makeInventoryRepo } from '@/lib/db/repos/inventory'
 import { makeRecipeRepo } from '@/lib/db/repos/recipe'
 import { BrewDB } from '@/lib/db/schema'
@@ -57,7 +59,7 @@ function recipe(over: Partial<Recipe> & { id: string }): Recipe {
   }
 }
 
-function emptyTables(): DumpV9['tables'] {
+function emptyTables(): DumpV10['tables'] {
   return {
     recipes: [],
     equipmentProfiles: [],
@@ -74,6 +76,7 @@ function emptyTables(): DumpV9['tables'] {
     seedTombstones: [],
     yeastLots: [],
     rowTombstones: [],
+    deviceLinks: [],
   }
 }
 
@@ -129,6 +132,64 @@ describe('tombstones stop a resurrection (the bug this feature closes)', () => {
       now: '2026-06-02T00:02:00.000Z',
     })
     expect(await dbA.recipes.get(id)).toBeUndefined()
+  })
+
+  it('a deviceLink (sensor-device assignment) deleted on device A stays deleted after a full convergence round — same LWW/tombstone merge every state table gets, proven for the new table', async () => {
+    const transport = new InMemorySyncTransport()
+    const dbA = freshDb()
+    const dbB = freshDb()
+    const batchId = crypto.randomUUID()
+    const link = await makeDeviceLinksRepo(dbA).assign('tilt:RED', batchId)
+    await dbB.deviceLinks.put(link) // B's stale pre-delete copy
+
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
+      now: '2026-06-01T00:00:00.000Z',
+    })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbB),
+      snapshot: noopSnapshot,
+      now: '2026-06-01T00:01:00.000Z',
+    })
+
+    await makeDeviceLinksRepo(dbA).remove(link.id)
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
+      now: '2026-06-02T00:00:00.000Z',
+    })
+
+    // B syncs against A's tombstone with only its OWN stale, older copy —
+    // must be suppressed, not resurrected.
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbB),
+      snapshot: noopSnapshot,
+      now: '2026-06-02T00:01:00.000Z',
+    })
+    expect(await dbB.deviceLinks.get(link.id)).toBeUndefined()
+
+    // Reassigning the SAME deviceKey to a different batch (a fresh row, newer
+    // than the tombstone) must survive the next merge — edit-after-delete,
+    // same symmetry every other table gets.
+    const reassigned = await makeDeviceLinksRepo(dbB).assign('tilt:RED', crypto.randomUUID())
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbB),
+      snapshot: noopSnapshot,
+      now: '2026-06-03T00:00:00.000Z',
+    })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
+      now: '2026-06-03T00:01:00.000Z',
+    })
+    expect((await dbA.deviceLinks.get(reassigned.id))?.batchId).toBe(reassigned.batchId)
   })
 })
 
@@ -196,6 +257,129 @@ describe('cascade: deleting an inventory item tombstones its ledger rows too', (
       expect(await db.inventoryItems.get(id)).toBeUndefined()
       expect(await db.stockTransactions.where('inventoryItemId').equals(id).count()).toBe(0)
     }
+  })
+})
+
+describe('cascade: deleting a batch tombstones its deviceLinks too', () => {
+  it('a deviceLink cascade-tombstoned by its BATCH being deleted (not a direct link delete) stays gone on both devices after a full convergence round — the F1 fix: propagates through sync exactly like the direct-delete case above', async () => {
+    const transport = new InMemorySyncTransport()
+    const dbA = freshDb()
+    const dbB = freshDb()
+    const batchId = crypto.randomUUID()
+    const b = {
+      id: batchId,
+      batchNo: 1,
+      name: 'Cascade Batch',
+      status: 'in-progress' as const,
+      process: [],
+      logs: [],
+      timers: [],
+      results: {},
+      startedAt: '2026-05-01T00:00:00.000Z',
+      updatedAt: '2026-05-01T00:00:00.000Z',
+      schemaVersion: 1 as const,
+    }
+    for (const db of [dbA, dbB]) await db.batches.put(b)
+    const link = await makeDeviceLinksRepo(dbA).assign('tilt:RED', batchId)
+    await dbB.deviceLinks.put(link) // B's stale pre-delete copy
+
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
+      now: '2026-06-01T00:00:00.000Z',
+    })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbB),
+      snapshot: noopSnapshot,
+      now: '2026-06-01T00:01:00.000Z',
+    })
+
+    // A deletes the BATCH (never touches deviceLinks directly) — batchRepo's
+    // cascade (repos/batch.ts) tombstones the link in the SAME transaction.
+    await makeBatchRepo(dbA).delete(batchId)
+    expect(await dbA.deviceLinks.get(link.id)).toBeUndefined() // cascaded locally already
+
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
+      now: '2026-06-02T00:00:00.000Z',
+    })
+
+    // B syncs against A's CASCADE tombstone with only its own stale, older
+    // copy of the link — must be suppressed, not resurrected, proving the
+    // cascade tombstone propagates through the merge exactly like a direct
+    // repo.remove() tombstone does.
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbB),
+      snapshot: noopSnapshot,
+      now: '2026-06-02T00:01:00.000Z',
+    })
+    expect(await dbB.batches.get(batchId)).toBeUndefined()
+    expect(await dbB.deviceLinks.get(link.id)).toBeUndefined()
+  })
+})
+
+// ── Adversarial-review fix (E2/#14): readings of a tombstoned batch die with
+// it. A reading ingested during delete-propagation lag has an `at` AFTER the
+// batch tombstone's `deletedAt`, so per-row suppression (at-or-before by
+// design, for edit-after-delete) can never catch it — pre-fix it survived as
+// a PERMANENT orphan (doctor C3 red, no UI to remove it). ────────────────────
+describe('cascade at merge time: readings of a batch that stayed tombstoned die with it', () => {
+  const batchId = '55555555-5555-4555-8555-555555555555'
+  const deletedAt = '2026-06-01T00:00:00.000Z'
+  const staleBatch = {
+    id: batchId,
+    batchNo: 1,
+    name: 'Deleted On The Phone',
+    status: 'in-progress' as const,
+    process: [],
+    logs: [],
+    timers: [],
+    results: {},
+    startedAt: '2026-05-01T00:00:00.000Z',
+    updatedAt: '2026-05-01T00:00:00.000Z', // strictly BEFORE deletedAt — the batch stays dead
+    schemaVersion: 1 as const,
+  }
+  const lateReading = {
+    id: crypto.randomUUID(),
+    batchId,
+    at: '2026-06-02T00:00:00.000Z', // strictly AFTER deletedAt — per-row suppression can't catch it
+    gravity: 1.018,
+    tempC: 19,
+    source: 'tilt' as const,
+    schemaVersion: 1 as const,
+  }
+
+  it('phone deletes the batch; the daemon ingests a reading AFTER the delete — the merge yields neither the batch nor the orphan reading (membership, not timestamp)', () => {
+    // Phone's perspective: it deleted the batch (tombstone only). Its remote
+    // pull is the daemon's canonical — the stale batch plus a reading the
+    // daemon ingested during delete-propagation lag.
+    const local = {
+      ...emptyTables(),
+      rowTombstones: [{ id: batchId, table: 'batches', deletedAt }],
+    }
+    const remote = { ...emptyTables(), batches: [staleBatch], readings: [lateReading] }
+    const merged = mergeDumpTables(local, remote)
+    expect(merged.batches).toEqual([]) // suppressed by its own tombstone, as before
+    expect(merged.readings).toEqual([]) // pre-fix: survived forever — its `at` beat `deletedAt`
+    expect(merged.rowTombstones).toHaveLength(1) // the batch tombstone still stands
+  })
+
+  it("the batch surviving via edit-after-delete keeps its readings — the only thing that saves a reading is its batch ITSELF surviving, never the reading's own `at`", () => {
+    const revivedBatch = { ...staleBatch, updatedAt: '2026-06-03T00:00:00.000Z' } // strictly AFTER deletedAt
+    const local = {
+      ...emptyTables(),
+      rowTombstones: [{ id: batchId, table: 'batches', deletedAt }],
+    }
+    const remote = { ...emptyTables(), batches: [revivedBatch], readings: [lateReading] }
+    const merged = mergeDumpTables(local, remote)
+    expect(merged.batches).toHaveLength(1) // edit-after-delete beat the tombstone
+    expect(merged.readings).toHaveLength(1) // its readings live exactly as long as it does
+    expect(merged.rowTombstones).toEqual([]) // superseded, dropped
   })
 })
 
@@ -303,10 +487,10 @@ describe('restore path: a genuine backup IMPORT must survive a remote canonical 
     // device's own local tombstone-prune (backup.ts's `restoredIds`) can
     // never touch this remote copy — only a re-sync can.
     const transport = new InMemorySyncTransport()
-    const canonical: DumpV9 = {
-      version: 9,
+    const canonical: DumpV10 = {
+      version: 10,
       exportedAt: '2026-06-05T00:00:00.000Z',
-      meta: { dumpVersion: 9, dbVersion: 11, schemaVersion: 1, rowCounts: {} },
+      meta: { dumpVersion: 10, dbVersion: 12, schemaVersion: 1, rowCounts: {} },
       tables: {
         ...emptyTables(),
         rowTombstones: [{ id, table: 'recipes', deletedAt: '2026-06-01T00:00:00.000Z' }], // AFTER the backup's updatedAt
@@ -359,12 +543,14 @@ describe('restore path: a full restore clears tombstones for rows it re-creates'
     await makeRecipeRepo(dbA).delete(id)
     expect(await dbA.rowTombstones.get(id)).toBeDefined()
 
-    // User imports an old backup that predates the deletion.
+    // User imports an old (genuinely pre-deviceLinks) v9 backup that predates
+    // the deletion.
+    const { deviceLinks: _omitDeviceLinks, ...v9Tables } = emptyTables()
     const oldDump: DumpV9 = {
       version: 9,
       exportedAt: '2026-05-02T00:00:00.000Z',
       meta: { dumpVersion: 9, dbVersion: 11, schemaVersion: 1, rowCounts: {} },
-      tables: { ...emptyTables(), recipes: [r] },
+      tables: { ...v9Tables, recipes: [r] },
     }
     await makeBackupService(dbA).restore(oldDump)
     expect(await dbA.recipes.get(id)).toBeDefined()
