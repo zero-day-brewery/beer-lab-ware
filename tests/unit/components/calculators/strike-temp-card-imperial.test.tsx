@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { StrikeTempCard } from '@/components/calc/calculators/strike-temp-card'
 import { formatWithUnit, fromDisplay } from '@/lib/brewing/convert/display-units'
@@ -32,7 +32,12 @@ describe('StrikeTempCard — imperial display units', () => {
     expect(screen.getByText('Ratio qt/lb')).toBeInTheDocument()
 
     // Defaults: 67 °C → 152.6 °F, 20 °C → 68 °F, 2.6 L/kg → 1.25 qt/lb.
-    expect(screen.getByLabelText('Mash target °F')).toHaveValue(152.6)
+    // Wait for the async-seeded converted VALUES, not just the label flip
+    // above — under full-suite parallel load the value can lag the label by a
+    // render tick, which intermittently failed this assertion in CI.
+    await waitFor(() => {
+      expect(screen.getByLabelText('Mash target °F')).toHaveValue(152.6)
+    })
     expect(screen.getByLabelText('Grain °F')).toHaveValue(68)
     expect(screen.getByLabelText('Ratio qt/lb')).toHaveValue(1.25)
 
