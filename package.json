@@ -6,9 +6,9 @@
   "author": "Zero-Day Brewery",
   "repository": {
     "type": "git",
-    "url": "https://github.com/public-n0cs-code/beer-lab-ware"
+    "url": "https://github.com/zero-day-brewery/beer-lab-ware"
   },
-  "homepage": "https://github.com/public-n0cs-code/beer-lab-ware",
+  "homepage": "https://github.com/zero-day-brewery/beer-lab-ware",
   "engines": {
     "node": ">=22"
   },

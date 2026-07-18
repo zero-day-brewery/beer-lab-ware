@@ -1,6 +1,6 @@
 # 🍺 Beer-Lab-Ware
 
-[![CI](https://github.com/public-n0cs-code/beer-lab-ware/actions/workflows/ci.yml/badge.svg)](https://github.com/public-n0cs-code/beer-lab-ware/actions/workflows/ci.yml)
+[![CI](https://github.com/zero-day-brewery/beer-lab-ware/actions/workflows/ci.yml/badge.svg)](https://github.com/zero-day-brewery/beer-lab-ware/actions/workflows/ci.yml)
 ![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 ![Beer-Lab-Ware hero banner](docs/assets/hero.png)
@@ -11,18 +11,18 @@ Beer-Lab-Ware is a Progressive Web App for homebrewers who want real recipe math
 
 ## Try it
 
-**[Open the live app →](https://public-n0cs-code.github.io/beer-lab-ware/)**
+**[Open the live app →](https://zero-day-brewery.github.io/beer-lab-ware/)**
 
 1. Open the link.
 2. Install it — **Install app** in the browser menu (desktop) or **Add to Home Screen** (phone).
 3. Brew. It works offline from then on, brew day included, and your data stays in your browser.
 
 Want your own copy on your own domain? Grab the prebuilt static bundle from the
-[latest release](https://github.com/public-n0cs-code/beer-lab-ware/releases) and drop it on
+[latest release](https://github.com/zero-day-brewery/beer-lab-ware/releases) and drop it on
 any web server — or one-click deploy:
 
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/public-n0cs-code/beer-lab-ware)
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/public-n0cs-code/beer-lab-ware)
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/zero-day-brewery/beer-lab-ware)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/zero-day-brewery/beer-lab-ware)
 
 ## What it looks like
 
