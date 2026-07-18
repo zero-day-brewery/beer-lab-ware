@@ -137,8 +137,14 @@ describe('FermentationReadings (via BatchSheetView)', () => {
       schemaVersion: 1,
     })
     render(<BatchSheetView />)
-    await screen.findByText('1.050')
-    const badges = await screen.findAllByTestId('reading-source-badge')
+    // Gate on the badges themselves, not a gravity value: a reading's gravity
+    // (e.g. "1.050") can also render as a fermentation-chart axis tick, so
+    // findByText('1.050') is ambiguous once the chart's async render lands.
+    // The source badges live only in the readings table — unambiguous.
+    await waitFor(() => {
+      expect(screen.getAllByTestId('reading-source-badge')).toHaveLength(2)
+    })
+    const badges = screen.getAllByTestId('reading-source-badge')
     expect(badges.map((b) => b.textContent)).toEqual(expect.arrayContaining(['manual', 'Tilt']))
   })
 
@@ -152,9 +158,12 @@ describe('FermentationReadings (via BatchSheetView)', () => {
       schemaVersion: 1,
     })
     render(<BatchSheetView />)
-    expect(await screen.findByText('1.030')).toBeInTheDocument()
+    // Gate on the row's delete button (table-only), not the gravity text —
+    // "1.030" can also land as a fermentation-chart axis tick (see the badge
+    // test above), which would make the wait ambiguous.
+    const deleteButton = await screen.findByRole('button', { name: /delete reading/i })
 
-    await user.click(screen.getByRole('button', { name: /delete reading/i }))
+    await user.click(deleteButton)
 
     await waitFor(async () => {
       expect(await readingsRepo.listByBatch(BATCH_ID)).toHaveLength(0)
