@@ -25,8 +25,8 @@ describe('appMetaRepo', () => {
     schemaVersion: 1,
   })
 
-  it('schema is at version 10 with a yeastLots store', async () => {
-    expect(db.verno).toBe(10)
+  it('schema is at version 12 with a yeastLots store', async () => {
+    expect(db.verno).toBe(12)
     expect(db.tables.map((t) => t.name)).toContain('appMeta')
   })
 

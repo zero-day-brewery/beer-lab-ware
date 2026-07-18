@@ -32,7 +32,11 @@ export function makeIngredientRepo(database: BrewDB) {
       return validated
     },
     async delete(id: string): Promise<void> {
-      await database.ingredients.delete(id)
+      const deletedAt = new Date().toISOString()
+      await database.transaction('rw', database.ingredients, database.rowTombstones, async () => {
+        await database.ingredients.delete(id)
+        await database.rowTombstones.put({ id, table: 'ingredients', deletedAt })
+      })
     },
   }
 }

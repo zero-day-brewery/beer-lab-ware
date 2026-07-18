@@ -1,0 +1,104 @@
+[
+  {
+    "_id": "bf-batch-42",
+    "batchNo": 42,
+    "name": "Batch",
+    "status": "Completed",
+    "brewDate": 1746092400000,
+    "bottlingDate": 1747302000000,
+    "fermentationStartDate": 1746178800000,
+    "measuredOg": 1.061,
+    "measuredFg": 1.013,
+    "measuredAbv": 6.3,
+    "measuredMashPh": 5.35,
+    "measuredBoilSize": 23.5,
+    "measuredBatchSize": 19.2,
+    "measuredPreBoilGravity": 1.051,
+    "measuredEfficiency": 68.5,
+    "batchNotes": "Great brew day, slight boil-over at hot break.",
+    "estimatedColor": 11.8,
+    "recipe": {
+      "_id": "bf-recipe-hazy-1",
+      "name": "Hazy Horizon IPA",
+      "type": "All Grain",
+      "batchSize": 20,
+      "boilTime": 60,
+      "og": 1.062,
+      "fg": 1.014,
+      "abv": 6.3,
+      "ibu": 45,
+      "color": 11.8,
+      "fermentables": [
+        {
+          "name": "Pale Ale Malt",
+          "type": "Grain",
+          "amount": 4.5,
+          "potential": 1.037,
+          "color": 3.5
+        }
+      ],
+      "hops": [
+        {
+          "name": "Citra",
+          "alpha": 12.5,
+          "amount": 20,
+          "use": "Boil",
+          "time": 10,
+          "type": "Pellet"
+        }
+      ],
+      "yeasts": [
+        {
+          "name": "London Ale III",
+          "form": "Liquid",
+          "amount": 1,
+          "unit": "pkg",
+          "attenuation": 75
+        }
+      ],
+      "miscs": [],
+      "mash": {
+        "steps": [{ "name": "Sacc", "type": "Temperature", "stepTemp": 67, "stepTime": 60 }]
+      }
+    },
+    "readings": [
+      { "time": 1746178800000, "sg": 1.061, "temp": 19.2 },
+      { "time": 1746351600000, "sg": 1.031, "temp": 20.1, "comment": "Krausen peak" },
+      { "time": 1746870000000, "sg": 1.013, "temp": 19.5, "ph": 4.4 },
+      { "sg": 1.012, "temp": 19.4 }
+    ]
+  },
+  {
+    "_id": "bf-batch-43",
+    "batchNo": 43,
+    "name": "Batch",
+    "status": "Fermenting",
+    "brewDate": 1752217200000,
+    "measuredOg": 1.055,
+    "recipe": {
+      "_id": "bf-recipe-saison-2",
+      "name": "Farmhouse Saison",
+      "type": "All Grain",
+      "batchSize": 19,
+      "boilTime": 90,
+      "og": 1.054,
+      "fg": 1.004,
+      "ibu": 25,
+      "color": 8,
+      "fermentables": [
+        { "name": "Pilsner Malt", "type": "Grain", "amount": 4.2, "potential": 1.037, "color": 1.6 }
+      ],
+      "hops": [
+        { "name": "Saaz", "alpha": 3.5, "amount": 45, "use": "Boil", "time": 60, "type": "Pellet" }
+      ],
+      "yeasts": [
+        { "name": "Belle Saison", "form": "Dry", "amount": 1, "unit": "pkg", "attenuation": 85 }
+      ],
+      "miscs": [],
+      "mash": {
+        "steps": [{ "name": "Sacc", "type": "Temperature", "stepTemp": 65, "stepTime": 75 }]
+      }
+    },
+    "readings": [{ "time": 1752303600000, "sg": 1.04, "temp": 24.0 }]
+  }
+]

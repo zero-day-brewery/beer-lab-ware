@@ -1,10 +1,10 @@
 # Beer-Lab-Ware sync origin — Caddy reverse-proxy template
 #
-# Serves the PWA static export AND reverse-proxies /state to the sync daemon on
-# the SAME origin (so HttpSyncTransport.baseUrl == window.location.origin — no
-# CORS). Prefer nginx or Traefik instead? The shape is the same: terminate TLS,
-# proxy /state to the daemon's loopback port, serve the static export for
-# everything else.
+# Serves the PWA static export AND reverse-proxies /state + /readings to the
+# sync daemon on the SAME origin (so HttpSyncTransport.baseUrl ==
+# window.location.origin — no CORS). Prefer nginx or Traefik instead? The
+# shape is the same: terminate TLS, proxy /state + /readings to the daemon's
+# loopback port, serve the static export for everything else.
 #
 # Replace <your-domain> with your own domain (or LAN hostname) and
 # <your-server-ip> with the IP this host should bind. Caddy issues and renews
@@ -20,10 +20,36 @@
 <your-domain> {
 	bind <your-server-ip>
 
+	# Security headers for every response on this origin.
+	#
+	# The Content-Security-Policy below carries ONLY frame-ancestors — the one
+	# directive a <meta http-equiv="Content-Security-Policy"> CANNOT express (the
+	# spec ignores it there). Everything else (script-src with its per-page
+	# inline-script hashes, etc.) stays owned by the app's build-time meta CSP
+	# (see scripts/inject-csp.mjs). Do NOT add script-src or any other directive
+	# here — a second CSP header is intersected with the meta one by the browser,
+	# so a header lacking the build's hashes would silently break every inline
+	# script the app relies on.
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options DENY
+		Content-Security-Policy "frame-ancestors 'none'"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+
 	# Sync API → the local daemon (mandatory Bearer auth is enforced IN the
-	# daemon, not here). 127.0.0.1 only; the daemon never binds a public
-	# interface.
+	# daemon, not here; GET /health is the daemon's own unauthenticated
+	# liveness probe for uptime monitoring). 127.0.0.1 only; the daemon never
+	# binds a public interface. /readings is the automatic sensor-ingest route
+	# (see docs/sensors.md) — same daemon, same auth posture as /state.
 	handle /state* {
+		reverse_proxy 127.0.0.1:8787
+	}
+	handle /readings* {
+		reverse_proxy 127.0.0.1:8787
+	}
+	handle /health {
 		reverse_proxy 127.0.0.1:8787
 	}
 

@@ -1,9 +1,11 @@
 'use client'
 import { Gauge } from 'lucide-react'
 import { useState } from 'react'
+import { useDisplayNumberState } from '@/hooks/use-display-units'
 import { calcForceCarb } from '@/lib/brewing/carbonation/force-carb'
 import { balancedLineLength_ft } from '@/lib/brewing/carbonation/line-balance'
 import { calcSpunding } from '@/lib/brewing/carbonation/spunding'
+import { formatForInput, unitLabel } from '@/lib/brewing/convert/display-units'
 import { CalcCard, CalcField, CalcInputs, CalcOutput, DASH } from './calc-card'
 
 /**
@@ -11,36 +13,37 @@ import { CalcCard, CalcField, CalcInputs, CalcOutput, DASH } from './calc-card'
  *   - Force carb   → `calcForceCarb`   (cold set-and-forget SET psi)
  *   - Spunding     → `calcSpunding`    (warm ferment setpoint, MAWP-capped)
  *   - Line balance → `balancedLineLength_ft`
- * All strings-in, parse + guard, no submit.
+ * All strings-in, parse + guard, no submit. Temperatures are edited in the
+ * user's display units (°F when imperial) and converted to canonical °C for
+ * the engines; CO₂ volumes + psi are unit-system-independent already.
  */
 export function CarbonationCard() {
-  // Force carb
+  // Force carb — temp edited in display units, `.canonical` is °C.
   const [fcVolStr, setFcVolStr] = useState('2.4')
-  const [fcTempStr, setFcTempStr] = useState('4')
+  const fcTempState = useDisplayNumberState(4, 'temp')
+  const units = fcTempState.units
   // Spunding
   const [spVolStr, setSpVolStr] = useState('2.4')
-  const [spTempStr, setSpTempStr] = useState('12')
+  const spTempState = useDisplayNumberState(12, 'temp')
   const [spMawpStr, setSpMawpStr] = useState('30')
   // Line balance
   const [linePsiStr, setLinePsiStr] = useState('11')
   const [lineResStr, setLineResStr] = useState('2')
 
   const fcVol = Number(fcVolStr)
-  const fcTemp = Number(fcTempStr)
-  const fcValid = Number.isFinite(fcVol) && fcVol > 0 && Number.isFinite(fcTemp)
-  const forceCarb = fcValid ? calcForceCarb({ targetVol: fcVol, servingTemp_C: fcTemp }) : null
+  const fcTemp = fcTempState.canonical
+  const fcValid = Number.isFinite(fcVol) && fcVol > 0 && fcTemp != null
+  const forceCarb = fcValid
+    ? calcForceCarb({ targetVol: fcVol, servingTemp_C: fcTemp as number })
+    : null
 
   const spVol = Number(spVolStr)
-  const spTemp = Number(spTempStr)
+  const spTemp = spTempState.canonical
   const spMawp = Number(spMawpStr)
   const spValid =
-    Number.isFinite(spVol) &&
-    spVol > 0 &&
-    Number.isFinite(spTemp) &&
-    Number.isFinite(spMawp) &&
-    spMawp > 0
+    Number.isFinite(spVol) && spVol > 0 && spTemp != null && Number.isFinite(spMawp) && spMawp > 0
   const spunding = spValid
-    ? calcSpunding({ targetVol: spVol, fermTemp_C: spTemp, mawp_psi: spMawp })
+    ? calcSpunding({ targetVol: spVol, fermTemp_C: spTemp as number, mawp_psi: spMawp })
     : null
 
   const linePsi = Number(linePsiStr)
@@ -70,12 +73,12 @@ export function CarbonationCard() {
             onChange={(e) => setFcVolStr(e.target.value)}
           />
           <CalcField
-            label="Serving °C"
+            label={`Serving ${unitLabel('temp', units)}`}
             type="number"
             step="0.5"
-            value={fcTempStr}
-            placeholder="4"
-            onChange={(e) => setFcTempStr(e.target.value)}
+            value={fcTempState.text}
+            placeholder={formatForInput(4, 'temp', units)}
+            onChange={(e) => fcTempState.setText(e.target.value)}
           />
         </CalcInputs>
         <CalcOutput
@@ -98,12 +101,12 @@ export function CarbonationCard() {
             onChange={(e) => setSpVolStr(e.target.value)}
           />
           <CalcField
-            label="Ferment °C"
+            label={`Ferment ${unitLabel('temp', units)}`}
             type="number"
             step="0.5"
-            value={spTempStr}
-            placeholder="12"
-            onChange={(e) => setSpTempStr(e.target.value)}
+            value={spTempState.text}
+            placeholder={formatForInput(12, 'temp', units)}
+            onChange={(e) => spTempState.setText(e.target.value)}
           />
           <CalcField
             label="MAWP psi"
@@ -156,6 +159,12 @@ export function CarbonationCard() {
           hint={lineLen != null ? 'lengthen if pours foam' : 'enter psi + resistance'}
         />
       </div>
+
+      <p className="text-[0.68rem] text-muted-foreground" role="note">
+        Safety: pressure outputs are estimates. Always verify against your keg or fermenter&apos;s
+        rated MAWP and the manufacturer&apos;s specs before applying pressure — over-pressurized
+        vessels and bottles can cause injury.
+      </p>
     </CalcCard>
   )
 }

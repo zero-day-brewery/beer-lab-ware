@@ -2,6 +2,7 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { BrewfatherImportSection } from '@/components/recipe/brewfather-import'
 import { parseBeerXML } from '@/lib/brewing/beerxml/parse'
 import { recipeRepo } from '@/lib/db/repos/recipe'
 
@@ -61,13 +62,20 @@ export function ImportView() {
     <div className="flex max-w-xl flex-col gap-6">
       <header className="border-b border-border/70 pb-6">
         <span className="eyebrow">📥 Import</span>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">Import recipes</h1>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight">Import your brewery</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Upload a BeerXML 1.0 file exported from your other brewing software (BeerSmith,
-          Grainfather, etc.). All recipes in the file will be imported.
+          Bring recipes in via BeerXML, or migrate your whole Brewfather history — batches,
+          readings, and inventory included.
         </p>
       </header>
       <div className="tap-card flex flex-col gap-3 p-5">
+        <div>
+          <h2 className="text-lg font-semibold">BeerXML recipes</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Upload a BeerXML 1.0 file exported from your other brewing software (BeerSmith,
+            Grainfather, etc.). All recipes in the file will be imported.
+          </p>
+        </div>
         <label className="flex flex-col gap-1">
           <span className="text-sm font-medium">BeerXML file</span>
           <input
@@ -87,6 +95,7 @@ export function ImportView() {
           carry our equipment FK.
         </p>
       </div>
+      <BrewfatherImportSection />
     </div>
   )
 }

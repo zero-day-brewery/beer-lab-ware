@@ -19,8 +19,37 @@ export function makeBatchRepo(database: BrewDB) {
       await database.batches.put(validated)
       return validated
     },
+    /**
+     * ATOMIC delete + cascade: removes the batch AND tombstones any
+     * `deviceLinks` row still pointed at it, in ONE transaction — mirrors
+     * `inventoryRepo.delete()`'s item→ledger cascade (see `repos/inventory.ts`).
+     * Without this, a deleted batch's stale link would keep resolving in the
+     * sync daemon's `POST /readings` (see `reading-ingest.ts` /
+     * `sync-server.ts`) — the daemon's own batch-existence check catches that
+     * at ingest time too (belt-and-suspenders), but cascading the tombstone
+     * here is what makes the link actually GO AWAY (and stay gone across a
+     * sync merge — a surviving pre-delete copy on another device would
+     * otherwise resurrect it) instead of dangling forever.
+     */
     async delete(id: string): Promise<void> {
-      await database.batches.delete(id)
+      const deletedAt = new Date().toISOString()
+      await database.transaction(
+        'rw',
+        database.batches,
+        database.rowTombstones,
+        database.deviceLinks,
+        async () => {
+          const cascadedLinks = await database.deviceLinks.where('batchId').equals(id).toArray()
+          await database.batches.delete(id)
+          await database.rowTombstones.put({ id, table: 'batches', deletedAt })
+          if (cascadedLinks.length > 0) {
+            await database.deviceLinks.bulkDelete(cascadedLinks.map((l) => l.id))
+            await database.rowTombstones.bulkPut(
+              cascadedLinks.map((l) => ({ id: l.id, table: 'deviceLinks', deletedAt })),
+            )
+          }
+        },
+      )
     },
     async getActive(): Promise<Batch | null> {
       const row = await database.batches.filter((b) => b.status === 'in-progress').first()

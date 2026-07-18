@@ -14,7 +14,11 @@ export function makeReadingsRepo(database: BrewDB) {
       return rows.map((r) => ReadingSchema.parse(r))
     },
     async delete(id: string): Promise<void> {
-      await database.readings.delete(id)
+      const deletedAt = new Date().toISOString()
+      await database.transaction('rw', database.readings, database.rowTombstones, async () => {
+        await database.readings.delete(id)
+        await database.rowTombstones.put({ id, table: 'readings', deletedAt })
+      })
     },
   }
 }

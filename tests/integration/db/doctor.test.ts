@@ -51,12 +51,14 @@ describe('runDataDoctor', () => {
     db = new BrewDB('test-doctor')
     await db.open()
     // seedDefaults seeds a valid B40pro equipmentProfile (+ gear/water) we can
-    // reference, but it ALSO inserts 16 pantry inventoryItems with nonzero amount
-    // and NO stockTransactions, and writes NO settings row (verified against
-    // seed.ts + defaults/pantry.ts). Left as-is that makes C1 flag all 16 items
-    // and leaves C5 with no row to check. Normalize to a controlled baseline:
-    // clear the unledgered inventory + ledger so each test owns its own state, and
-    // add a real settings row that references the seeded default equipment profile.
+    // reference, plus pantry inventoryItems each now paired with a matching
+    // `opening` stockTransaction (see seed.ts's saveItemWithTxn rider fix —
+    // C1 stays green on a fresh seed, covered by the dedicated describe block
+    // below), but writes NO settings row (verified against seed.ts +
+    // defaults/pantry.ts), which leaves C5 with no row to check. Normalize to
+    // a controlled baseline regardless: clear the seeded inventory + ledger so
+    // each test owns its own state, and add a real settings row that
+    // references the seeded default equipment profile.
     await seedDefaults(db)
     await db.inventoryItems.clear()
     await db.stockTransactions.clear()
@@ -177,5 +179,153 @@ describe('runDataDoctor', () => {
     await db.recipes.add({ id: 'not-a-recipe' } as unknown as never)
     const report = await runDataDoctor(db, db.verno)
     expect(report.checks.find((c) => c.id === 'C7')?.ok).toBe(false)
+  })
+
+  it('C8 passes clean (no anomalies) on a healthy DB with no tombstones', async () => {
+    const report = await runDataDoctor(db, db.verno)
+    const c8 = report.checks.find((c) => c.id === 'C8')
+    expect(c8?.ok).toBe(true)
+    expect(c8?.count).toBe(0)
+  })
+
+  it('C8 fires on a constructed bad state: a live row OLDER than its own tombstone (should have been suppressed by the sync merge — a merge bug)', async () => {
+    const id = uuid()
+    await db.recipes.add({
+      id,
+      name: 'Zombie Ale',
+      type: 'all-grain',
+      batchSize_L: 19,
+      boilTime_min: 60,
+      equipmentProfileId: B40PRO_PROFILE_ID,
+      fermentables: [],
+      hops: [],
+      yeasts: [],
+      miscs: [],
+      mashSteps: [],
+      notes_md: '',
+      createdAt: '2026-05-01T00:00:00.000Z',
+      updatedAt: '2026-05-01T00:00:00.000Z', // OLDER than the tombstone below
+      schemaVersion: 1,
+    } as never)
+    await db.rowTombstones.add({ id, table: 'recipes', deletedAt: '2026-06-01T00:00:00.000Z' })
+
+    const report = await runDataDoctor(db, db.verno)
+    const c8 = report.checks.find((c) => c.id === 'C8')
+    expect(c8?.ok).toBe(false)
+    expect(c8?.severity).toBe('warn')
+    expect(c8?.sampleIds).toContain(`recipes:${id}`)
+  })
+
+  it('C8 does NOT fire on a legitimate edit-after-delete (row newer than its tombstone — the tombstone is just not yet GC-ed)', async () => {
+    const id = uuid()
+    await db.recipes.add({
+      id,
+      name: 'Reborn Ale',
+      type: 'all-grain',
+      batchSize_L: 19,
+      boilTime_min: 60,
+      equipmentProfileId: B40PRO_PROFILE_ID,
+      fermentables: [],
+      hops: [],
+      yeasts: [],
+      miscs: [],
+      mashSteps: [],
+      notes_md: '',
+      createdAt: '2026-05-01T00:00:00.000Z',
+      updatedAt: '2026-06-05T00:00:00.000Z', // NEWER than the tombstone below
+      schemaVersion: 1,
+    } as never)
+    await db.rowTombstones.add({ id, table: 'recipes', deletedAt: '2026-06-01T00:00:00.000Z' })
+
+    const report = await runDataDoctor(db, db.verno)
+    const c8 = report.checks.find((c) => c.id === 'C8')
+    expect(c8?.ok).toBe(true)
+  })
+
+  it('C9 flags an orphan deviceLinks.batchId', async () => {
+    await db.deviceLinks.add({
+      id: uuid(),
+      deviceKey: 'tilt:RED',
+      batchId: 'ghost-batch',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      schemaVersion: 1,
+    })
+    const report = await runDataDoctor(db, db.verno)
+    expect(report.checks.find((c) => c.id === 'C9')?.ok).toBe(false)
+  })
+
+  it('C9 passes when a deviceLink references a real batch', async () => {
+    const batchId = uuid()
+    await db.batches.add({
+      id: batchId,
+      batchNo: 1,
+      name: 'Batch 1',
+      status: 'in-progress',
+      process: [],
+      logs: [],
+      timers: [],
+      results: {},
+      startedAt: '2026-05-01T00:00:00.000Z',
+      updatedAt: '2026-05-01T00:00:00.000Z',
+      schemaVersion: 1,
+    } as never)
+    await db.deviceLinks.add({
+      id: uuid(),
+      deviceKey: 'tilt:RED',
+      batchId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      schemaVersion: 1,
+    })
+    const report = await runDataDoctor(db, db.verno)
+    expect(report.checks.find((c) => c.id === 'C9')?.ok).toBe(true)
+  })
+})
+
+describe('runDataDoctor + seedDefaults (rider fix: fresh install stays C1-clean)', () => {
+  // A SEPARATE db from the `runDataDoctor` block above, deliberately WITHOUT
+  // the shared beforeEach's inventoryItems/stockTransactions clear — this is
+  // exactly the "fresh install, nothing touched yet" scenario the E4 QA
+  // finding was about: seedDefaults() alone must leave C1 green.
+  let freshDb: BrewDB
+  beforeEach(async () => {
+    freshDb = new BrewDB('test-doctor-fresh-seed')
+    await freshDb.open()
+  })
+  afterEach(async () => {
+    freshDb.close()
+    await BrewDB.delete('test-doctor-fresh-seed')
+  })
+
+  it('a freshly-seeded database (no user action) passes C1 — every seeded pantry item has a matching opening ledger row', async () => {
+    const seeded = await seedDefaults(freshDb)
+    expect(seeded.insertedInventory).toBeGreaterThan(0) // sanity: the pantry rider path actually ran
+
+    const report = await runDataDoctor(freshDb, freshDb.verno)
+    const c1 = report.checks.find((c) => c.id === 'C1')
+    expect(c1?.ok).toBe(true)
+    expect(c1?.count).toBe(0)
+
+    // Every seeded item's amount really is backed by exactly one ledger row.
+    const items = await freshDb.inventoryItems.toArray()
+    for (const item of items) {
+      const txns = await freshDb.stockTransactions
+        .where('inventoryItemId')
+        .equals(item.id)
+        .toArray()
+      expect(txns).toHaveLength(1)
+      expect(txns[0].reason).toBe('opening')
+      expect(txns[0].delta).toBe(item.amount)
+    }
+  })
+
+  it('re-seeding an already-seeded database stays idempotent and C1-clean (no duplicate opening rows)', async () => {
+    await seedDefaults(freshDb)
+    const second = await seedDefaults(freshDb)
+    expect(second.insertedInventory).toBe(0) // every id already existed — skipped, not re-ledgered
+
+    const report = await runDataDoctor(freshDb, freshDb.verno)
+    expect(report.checks.find((c) => c.id === 'C1')?.ok).toBe(true)
   })
 })

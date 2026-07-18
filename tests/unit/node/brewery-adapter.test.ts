@@ -185,12 +185,12 @@ function fixtureCollections(): BreweryCollections {
   }
 }
 
-/** A real export envelope (v8 dump), written to disk with plain fs (not saveBrewery). */
+/** A real export envelope (v10 dump), written to disk with plain fs (not saveBrewery). */
 function fixtureEnvelope(): BreweryFile {
   return {
-    version: 8,
+    version: 10,
     exportedAt: NOW_ISO,
-    meta: { dumpVersion: 8, dbVersion: 8, rowCounts: {}, schemaVersion: 1 },
+    meta: { dumpVersion: 10, dbVersion: 10, rowCounts: {}, schemaVersion: 1 },
     tables: fixtureCollections(),
   }
 }

@@ -1,11 +1,15 @@
 'use client'
 import { useFieldArray, useFormContext } from 'react-hook-form'
+import { UnitNumberInput } from '@/components/ui/unit-number-input'
+import { useDisplayUnits } from '@/hooks/use-display-units'
+import { unitLabel } from '@/lib/brewing/convert/display-units'
 import type { Recipe } from '@/lib/brewing/types/recipe'
 import { newId } from '@/lib/utils/id'
 
 export function FermentablesEditor() {
   const { register, control } = useFormContext<Recipe>()
   const { fields, append, remove } = useFieldArray({ control, name: 'fermentables' })
+  const units = useDisplayUnits()
 
   return (
     <section className="flex flex-col gap-3">
@@ -82,12 +86,13 @@ export function FermentablesEditor() {
                   />
                 </label>
                 <label className="flex flex-col gap-0.5">
-                  <span className="text-xs">Amount (kg)</span>
-                  <input
+                  <span className="text-xs">Amount ({unitLabel('mass-grain', units)})</span>
+                  <UnitNumberInput
                     aria-label="amount"
-                    type="number"
+                    control={control}
+                    name={`fermentables.${i}.amount_kg` as const}
+                    kind="mass-grain"
                     step="0.05"
-                    {...register(`fermentables.${i}.amount_kg` as const, { valueAsNumber: true })}
                     className="rounded border border-input bg-background px-2 py-1 text-sm"
                   />
                 </label>

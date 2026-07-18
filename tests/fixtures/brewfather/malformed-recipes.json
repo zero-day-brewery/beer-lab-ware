@@ -1,0 +1,24 @@
+[
+  {
+    "_id": "bf-recipe-good",
+    "name": "Good Bitter",
+    "type": "All Grain",
+    "batchSize": 19,
+    "boilTime": 60,
+    "og": 1.041,
+    "fg": 1.01,
+    "ibu": 28,
+    "color": 16,
+    "fermentables": [
+      { "name": "Maris Otter", "type": "Grain", "amount": 3.6, "potential": 1.038, "color": 3 }
+    ],
+    "hops": [
+      { "name": "EKG", "alpha": 5, "amount": 40, "use": "Boil", "time": 60, "type": "Pellet" }
+    ],
+    "yeasts": [{ "name": "S-04", "form": "Dry", "amount": 1, "unit": "pkg", "attenuation": 74 }],
+    "miscs": [],
+    "mash": { "steps": [{ "name": "Sacc", "type": "Temperature", "stepTemp": 66, "stepTime": 60 }] }
+  },
+  "this is not an entity",
+  { "_id": "bf-recipe-broken", "name": "No Batch Size Porter", "type": "All Grain" }
+]

@@ -5,7 +5,8 @@ import { FIXTURE_BATCH_ID, FIXTURE_RECIPE_NAME } from './fixtures/constants'
 
 const FIXTURE = path.resolve(__dirname, 'fixtures/seed.dump.json')
 const STEP1_RECIPE = 'E2E Smoke Ale'
-const CHART_MARKS = '[data-testid="fermentation-chart"] path, [data-testid="fermentation-chart"] circle'
+const CHART_MARKS =
+  '[data-testid="fermentation-chart"] path, [data-testid="fermentation-chart"] circle'
 
 // Zod v4 feature-detects eval via `new Function('')` guarded by try/catch (see
 // zod/v4/core/util.js `allowsEval`). The hash CSP CORRECTLY blocks that at the browser

@@ -2,16 +2,20 @@
  * Terminal/MCP Stage A — the file-backed brewery STORE (pure Node, no browser).
  *
  * This module loads + persists the app's EXPORTED brewery JSON (the same envelope
- * the in-app "Export backup (JSON)" button produces — a `DumpV8` from
+ * the in-app "Export backup (JSON)" button produces — a `DumpV10` from
  * `src/lib/db/backup.ts`) using only Node `fs` + the existing Zod schemas. It is
  * the file substrate under which the Node `ToolDeps` / `ActionWriteDeps` run, so
  * the browser app's tool registry + `applyAction` can execute OUTSIDE the browser.
  * It is ALSO the canonical store the Track B sync daemon wraps (GET/PUT /state).
  *
  * Design contract (mirrors `backup.ts`):
- *   - Envelope: `{ version: 1..8, exportedAt, meta?, tables: {...} }`. We READ any
- *     v1..v8 dump (older dumps simply lack the newer tables → empty collections)
- *     and we always WRITE the current v8 envelope (+ a regenerated `meta` sidecar).
+ *   - Envelope: `{ version: 1..10, exportedAt, meta?, tables: {...} }`. We READ any
+ *     v1..v10 dump (older dumps simply lack the newer tables → empty collections)
+ *     and we always WRITE the current v10 envelope (+ a regenerated `meta` sidecar)
+ *     via `saveBrewery` — the ONE exception is the sync daemon's `POST /readings`
+ *     (`sync-server.ts`), which deliberately bypasses `saveBrewery` for a SURGICAL
+ *     raw-JSON write that never bumps a stored file's version (see that module's
+ *     header for why).
  *   - Zod-validate EVERY row on load AND on save (CLAUDE.md "parse on read AND write").
  *   - Atomic writes: serialize → write a temp file in the target's dir → `rename`
  *     over the target. A failed/partial write can never corrupt the existing file.
@@ -31,6 +35,8 @@ import {
 } from '@/lib/brewing/types/backup-meta'
 import type { Batch } from '@/lib/brewing/types/batch'
 import { BatchSchema } from '@/lib/brewing/types/batch'
+import type { DeviceLink } from '@/lib/brewing/types/device-link'
+import { DeviceLinkSchema } from '@/lib/brewing/types/device-link'
 import type { EquipmentProfile } from '@/lib/brewing/types/equipment'
 import { EquipmentProfileSchema } from '@/lib/brewing/types/equipment'
 import type { GearItem } from '@/lib/brewing/types/gear'
@@ -62,8 +68,30 @@ interface SeedTombstone {
 }
 const SeedTombstoneSchema = z.object({ id: z.string() })
 
-/** The current export envelope version we write. Matches `DumpV8` in backup.ts. */
-export const CURRENT_DUMP_VERSION = 8 as const
+/**
+ * Deletion tombstone for the sync merge (mirrors `RowTombstone` in
+ * db/schema.ts / backup.ts — a three-field row, no standalone types module
+ * needed here either).
+ */
+interface RowTombstone {
+  id: string
+  table: string
+  deletedAt: string
+}
+// `deletedAt` is checked to PARSE to a finite timestamp — a corrupt value
+// would otherwise fail open (`Date.parse` → `NaN` → every comparison against
+// it is false, so it would never suppress a row and never GC — see
+// sync/merge.ts + sync-client.ts). Same hardening as backup.ts's schema.
+const RowTombstoneSchema = z.object({
+  id: z.string(),
+  table: z.string(),
+  deletedAt: z.string().refine((s) => Number.isFinite(Date.parse(s)), {
+    message: 'deletedAt must be a parseable timestamp',
+  }),
+})
+
+/** The current export envelope version we write. Matches `DumpV10` in backup.ts. */
+export const CURRENT_DUMP_VERSION = 10 as const
 
 /** The in-memory brewery — one array per exported table, all Zod-validated. */
 export interface BreweryCollections {
@@ -81,9 +109,11 @@ export interface BreweryCollections {
   stockTransactions: StockTransaction[]
   seedTombstones: SeedTombstone[]
   yeastLots: YeastLot[]
+  rowTombstones: RowTombstone[]
+  deviceLinks: DeviceLink[]
 }
 
-/** The on-disk file shape we WRITE (a v8 dump — same envelope as the app). */
+/** The on-disk file shape we WRITE (a v10 dump — same envelope as the app). */
 export interface BreweryFile {
   version: typeof CURRENT_DUMP_VERSION
   exportedAt: string
@@ -91,7 +121,8 @@ export interface BreweryFile {
   tables: BreweryCollections
 }
 
-const SUPPORTED_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8] as const
+/** Envelope versions this store can read. Also reported by `GET /health`. */
+export const SUPPORTED_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const
 
 /** A fresh, empty set of collections (all tables present, all empty). */
 export function emptyCollections(): BreweryCollections {
@@ -110,6 +141,8 @@ export function emptyCollections(): BreweryCollections {
     stockTransactions: [],
     seedTombstones: [],
     yeastLots: [],
+    rowTombstones: [],
+    deviceLinks: [],
   }
 }
 
@@ -142,6 +175,8 @@ export function validateCollections(tables: RawTables): BreweryCollections {
     stockTransactions: parseAll(tables.stockTransactions, (r) => StockTransactionSchema.parse(r)),
     seedTombstones: parseAll(tables.seedTombstones, (r) => SeedTombstoneSchema.parse(r)),
     yeastLots: parseAll(tables.yeastLots, (r) => YeastLotSchema.parse(r)),
+    rowTombstones: parseAll(tables.rowTombstones, (r) => RowTombstoneSchema.parse(r)),
+    deviceLinks: parseAll(tables.deviceLinks, (r) => DeviceLinkSchema.parse(r)),
   }
 }
 
@@ -219,6 +254,89 @@ export async function atomicWriteJson(filePath: string, data: unknown): Promise<
   }
 }
 
+const BACKUP_SUFFIX = '.bak'
+
+/** `2026-07-16T10:15:00.000Z` → `2026-07-16T101500Z` (filename-safe, second precision). */
+function backupTimestamp(d: Date): string {
+  return d
+    .toISOString()
+    .replace(/:/g, '')
+    .replace(/\.\d+Z$/, 'Z')
+}
+
+/** True when `entryName` is a rotated backup of `filePath` (`<basename>.<...>.bak`). */
+function isBackupOf(filePath: string, entryName: string): boolean {
+  const base = path.basename(filePath)
+  return entryName.startsWith(`${base}.`) && entryName.endsWith(BACKUP_SUFFIX)
+}
+
+/**
+ * Copy `contents` to `<filePath>.<stamp>.bak`, using `COPYFILE_EXCL` so two
+ * generations landing in the same wall-clock second never silently clobber each
+ * other — on a name collision a `-N` counter is appended before `.bak`.
+ */
+async function writeUniqueBackup(filePath: string, stamp: string, contents: Buffer): Promise<void> {
+  let n = 0
+  for (;;) {
+    const suffix = n === 0 ? '' : `-${n}`
+    const candidate = `${filePath}.${stamp}${suffix}${BACKUP_SUFFIX}`
+    try {
+      await fs.writeFile(candidate, contents, { flag: 'wx' })
+      return
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+        n += 1
+        continue
+      }
+      throw err
+    }
+  }
+}
+
+/** Delete the oldest backups (by mtime) of `filePath` so at most `keep` remain. */
+async function pruneGenerations(filePath: string, keep: number): Promise<void> {
+  const dir = path.dirname(filePath)
+  const names = (await fs.readdir(dir)).filter((n) => isBackupOf(filePath, n))
+  if (names.length <= keep) return
+  const withMtime = await Promise.all(
+    names.map(async (n) => {
+      const full = path.join(dir, n)
+      const { mtimeMs } = await fs.stat(full)
+      return { full, mtimeMs }
+    }),
+  )
+  withMtime.sort((a, b) => a.mtimeMs - b.mtimeMs) // oldest first
+  const toDelete = withMtime.slice(0, withMtime.length - keep)
+  await Promise.all(toDelete.map((f) => fs.rm(f.full, { force: true })))
+}
+
+/**
+ * Rotate server-side generations of `filePath` BEFORE it gets overwritten: copy
+ * the current file to `<filePath>.<ISO-timestamp>.bak`, then prune the oldest
+ * backups so at most `keep` remain. A no-op when:
+ *   - `keep <= 0` (generations disabled), or
+ *   - `filePath` doesn't exist yet (the very first PUT has nothing to back up).
+ * Independent of `atomicWriteJson`'s temp+rename — callers await this BEFORE
+ * calling `atomicWriteJson` so the pre-overwrite snapshot is durable before the
+ * canonical file changes; it never touches the atomic write path itself.
+ */
+export async function rotateGenerations(
+  filePath: string,
+  keep: number,
+  now: () => Date = () => new Date(),
+): Promise<void> {
+  if (keep <= 0) return
+  let current: Buffer
+  try {
+    current = await fs.readFile(filePath)
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw err
+  }
+  await writeUniqueBackup(filePath, backupTimestamp(now()), current)
+  await pruneGenerations(filePath, keep)
+}
+
 /**
  * Read + JSON.parse + Zod-validate a brewery export file into in-memory
  * collections. Throws on a missing file, invalid JSON, an unsupported version, or
@@ -238,7 +356,7 @@ export async function loadBrewery(filePath: string): Promise<BreweryCollections>
 }
 
 /**
- * Serialize collections back into the v6 export envelope and write it atomically.
+ * Serialize collections back into the current export envelope and write it atomically.
  * Re-validates every row before writing (parse-on-write), so a save can never
  * persist a malformed row; combined with the temp+rename it never corrupts the
  * existing file on failure.

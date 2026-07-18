@@ -1,0 +1,27 @@
+[
+  {
+    "_id": "bf-inv-misc-whirlfloc",
+    "name": "Whirlfloc",
+    "type": "Fining",
+    "use": "Boil",
+    "inventory": 40,
+    "unit": "items"
+  },
+  {
+    "_id": "bf-inv-misc-cacl",
+    "name": "Calcium Chloride",
+    "type": "Water Agent",
+    "use": "Mash",
+    "inventory": 500,
+    "unit": "g",
+    "costPerAmount": 0.01
+  },
+  {
+    "_id": "bf-inv-misc-vanilla",
+    "name": "Vanilla Extract",
+    "type": "Flavor",
+    "use": "Secondary",
+    "inventory": 3,
+    "unit": "tsp"
+  }
+]

@@ -56,7 +56,11 @@ export function makeYeastLotsRepo(database: BrewDB) {
     },
 
     async remove(id: string): Promise<void> {
-      await database.yeastLots.delete(id)
+      const deletedAt = new Date().toISOString()
+      await database.transaction('rw', database.yeastLots, database.rowTombstones, async () => {
+        await database.yeastLots.delete(id)
+        await database.rowTombstones.put({ id, table: 'yeastLots', deletedAt })
+      })
     },
   }
 }

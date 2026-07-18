@@ -71,7 +71,11 @@ export function DataSection() {
       )
       if (!proceed) return
       downloadDump(current) // back up current data first
-      await backupService.restore(guard.dump)
+      // bumpTimestamps: this is a genuine user-initiated IMPORT (not the internal
+      // sync-merge restore) — bump every restored row's last-write timestamp so it
+      // beats any stale tombstone still on the sync canonical, fleet-wide, on the
+      // next sync (see backup.ts's restore() doc comment).
+      await backupService.restore(guard.dump, { bumpTimestamps: true })
       // Restore the fermenter board if the file carried a composed snapshot (v7+).
       const local = (guard.dump as { local?: unknown }).local
       if (local && typeof local === 'object' && 'keys' in local) {

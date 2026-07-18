@@ -17,8 +17,10 @@
  */
 
 import { useRef, useState } from 'react'
+import { useDisplayUnits } from '@/hooks/use-display-units'
 import { type ApplyOutput, type ApplyResult, applyAction } from '@/lib/ai/actions/apply'
 import type { ActionDescriptor, ActionType } from '@/lib/ai/actions/types'
+import { formatForInput, unitLabel } from '@/lib/brewing/convert/display-units'
 
 /** Short kind label shown above the title. */
 const KIND_LABEL: Record<ActionType, string> = {
@@ -61,8 +63,10 @@ export interface ActionCardProps {
 
 /** The truthful preview body — a before→after grid for a scale, else the string. */
 function ActionPreview({ action }: { action: ActionDescriptor }) {
+  const units = useDisplayUnits()
   if (action.type === 'scale_recipe') {
     const { recipeName, before, after } = action.preview
+    const vol = (l: number) => `${formatForInput(l, 'volume', units)} ${unitLabel('volume', units)}`
     return (
       <div className="action-card-scale">
         <p className="action-card-recipe">{recipeName}</p>
@@ -70,9 +74,9 @@ function ActionPreview({ action }: { action: ActionDescriptor }) {
           <div>
             <dt>Batch size</dt>
             <dd>
-              <span className="action-card-before">{before.batchSize_L} L</span>
+              <span className="action-card-before">{vol(before.batchSize_L)}</span>
               <span aria-hidden="true"> → </span>
-              <span className="action-card-after">{after.batchSize_L} L</span>
+              <span className="action-card-after">{vol(after.batchSize_L)}</span>
             </dd>
           </div>
           <div>

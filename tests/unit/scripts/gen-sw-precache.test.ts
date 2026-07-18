@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { buildPrecache } from '../../../scripts/gen-sw-precache.mjs'
+import { buildPrecache, rewriteManifestForBase } from '../../../scripts/gen-sw-precache.mjs'
 
 describe('buildPrecache', () => {
   it('collects html/static/icon/svg/manifest assets and excludes sw.js', () => {
@@ -53,5 +53,41 @@ describe('buildPrecache', () => {
     const a = buildPrecache(dir) as { version: string }
     const b = buildPrecache(dir) as { version: string }
     expect(a.version).toBe(b.version)
+  })
+
+  it('prefixes every URL with the base path when one is set', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'precache-base-'))
+    mkdirSync(join(dir, 'settings'), { recursive: true })
+    mkdirSync(join(dir, '_next/static'), { recursive: true })
+    writeFileSync(join(dir, 'index.html'), '<html>root</html>')
+    writeFileSync(join(dir, 'settings/index.html'), '<html>settings</html>')
+    writeFileSync(join(dir, '_next/static/app.js'), 'console.log(1)')
+
+    const { entries } = buildPrecache(dir, '/beer-lab-ware') as {
+      entries: { url: string }[]
+    }
+    const urls = entries.map((e) => e.url)
+    expect(urls).toContain('/beer-lab-ware/')
+    expect(urls).toContain('/beer-lab-ware/settings/')
+    expect(urls).toContain('/beer-lab-ware/_next/static/app.js')
+    expect(urls.every((u) => u.startsWith('/beer-lab-ware/'))).toBe(true)
+  })
+})
+
+describe('rewriteManifestForBase', () => {
+  it('prefixes id/start_url/scope/icon srcs and leaves the rest alone', () => {
+    const manifest = {
+      id: '/',
+      name: 'Beer-Lab-Ware',
+      start_url: '/',
+      scope: '/',
+      icons: [{ src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' }],
+    }
+    const out = rewriteManifestForBase(manifest, '/beer-lab-ware') as typeof manifest
+    expect(out.id).toBe('/beer-lab-ware/')
+    expect(out.start_url).toBe('/beer-lab-ware/')
+    expect(out.scope).toBe('/beer-lab-ware/')
+    expect(out.icons[0].src).toBe('/beer-lab-ware/icons/icon-192.png')
+    expect(out.name).toBe('Beer-Lab-Ware')
   })
 })

@@ -32,7 +32,7 @@ describe('openDb', () => {
     database = new BrewDB('test-open')
     const r = await openDb(database)
     expect(r.status).toBe('ok')
-    if (r.status === 'ok') expect(r.verno).toBe(10)
+    if (r.status === 'ok') expect(r.verno).toBe(12)
   })
 
   it('returns version-newer when the stored DB is a higher version than the code', async () => {

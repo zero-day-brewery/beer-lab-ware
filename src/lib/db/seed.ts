@@ -19,7 +19,10 @@ import { EquipmentProfileSchema } from '@/lib/brewing/types/equipment'
 import { type GearItem, GearItemSchema } from '@/lib/brewing/types/gear'
 import { WaterSchema } from '@/lib/brewing/types/ingredient'
 import { type InventoryItem, InventoryItemSchema } from '@/lib/brewing/types/inventory'
+import { buildStockTransaction } from '@/lib/brewing/types/stock-transaction'
+import { makeStockTransactionsRepo } from '@/lib/db/repos/stock-transactions'
 import { type BrewDB, db } from '@/lib/db/schema'
+import { newId } from '@/lib/utils/id'
 
 export interface SeedResult {
   insertedProfile: boolean
@@ -77,6 +80,18 @@ export async function seedDefaults(database: BrewDB = db): Promise<SeedResult> {
     result.insertedGear += 1
   }
 
+  // Rider fix (E4 QA finding): a freshly-seeded pantry item used to be written
+  // with `inventoryItems.put` alone — no matching stockTransaction — so the
+  // ledger invariant `amount === Σ deltas` (doctor C1, assertLedgerInvariant)
+  // read Σ deltas = 0 against a nonzero seeded `amount` and flagged EVERY
+  // pantry item on a brand-new install. Route the write through the SAME
+  // atomic item+opening-txn path the v7 migration backfill and the Brewfather
+  // importer use (`stockTransactionsRepo.saveItemWithTxn` — one Dexie
+  // transaction, item + its opening ledger row land together or not at all),
+  // so a fresh install is doctor-clean from the very first launch. Existing
+  // installs are NOT migrated here (idempotent re-seed skips rows that
+  // already exist) — the doctor's existing C1 auto-fix already repairs those.
+  const stockTxRepo = makeStockTransactionsRepo(database)
   for (const item of ALL_INVENTORY) {
     if (tombstoned.has(item.id)) {
       result.skippedInventory += 1
@@ -87,7 +102,15 @@ export async function seedDefaults(database: BrewDB = db): Promise<SeedResult> {
       result.skippedInventory += 1
       continue
     }
-    await database.inventoryItems.put(InventoryItemSchema.parse(item))
+    const validated = InventoryItemSchema.parse(item)
+    const opening = buildStockTransaction({
+      id: newId(),
+      item: validated,
+      delta: validated.amount,
+      reason: 'opening',
+      at: validated.updatedAt,
+    })
+    await stockTxRepo.saveItemWithTxn(validated, opening)
     result.insertedInventory += 1
   }
 

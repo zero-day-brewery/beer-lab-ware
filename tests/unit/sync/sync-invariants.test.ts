@@ -17,6 +17,8 @@ afterEach(async () => {
   await Promise.all(dbs.splice(0).map((d) => d.delete().catch(() => {})))
 })
 
+const noopSnapshot = async () => {}
+
 function item(over: Partial<InventoryItem> & { id: string }): InventoryItem {
   return {
     name: 'Cascade',
@@ -72,9 +74,24 @@ describe('sync preserves the ledger invariant amount === Σ deltas', () => {
       reason: 'brew-deduct',
     })
 
-    await syncOnce({ transport, backup: makeBackupService(dbA), now: '2026-06-01T00:00:00.000Z' })
-    await syncOnce({ transport, backup: makeBackupService(dbB), now: '2026-06-01T00:01:00.000Z' })
-    await syncOnce({ transport, backup: makeBackupService(dbA), now: '2026-06-01T00:02:00.000Z' })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
+      now: '2026-06-01T00:00:00.000Z',
+    })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbB),
+      snapshot: noopSnapshot,
+      now: '2026-06-01T00:01:00.000Z',
+    })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
+      now: '2026-06-01T00:02:00.000Z',
+    })
 
     // converged ledger: opening +100, -30, -20 → amount 50 on BOTH devices
     for (const db of [dbA, dbB]) {
@@ -107,8 +124,18 @@ describe('sync treats settings as device-local (no cross-device clobber)', () =>
       schemaVersion: 1,
     })
 
-    await syncOnce({ transport, backup: makeBackupService(dbA), now: '2026-06-01T00:00:00.000Z' })
-    await syncOnce({ transport, backup: makeBackupService(dbB), now: '2026-06-01T00:01:00.000Z' })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
+      now: '2026-06-01T00:00:00.000Z',
+    })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbB),
+      snapshot: noopSnapshot,
+      now: '2026-06-01T00:01:00.000Z',
+    })
 
     const bSettings = await dbB.settings.get('global')
     expect((bSettings as { theme?: string })?.theme).toBe('neon') // B keeps its own

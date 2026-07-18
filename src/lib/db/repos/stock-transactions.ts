@@ -177,9 +177,30 @@ export function makeStockTransactionsRepo(database: BrewDB) {
       )
     },
 
-    /** Cascade delete every txn for an item (called when the item is deleted). */
+    /**
+     * Cascade delete every txn for an item, tombstoning each one in the SAME
+     * transaction (used standalone; `inventoryRepo.delete` does its own
+     * inline cascade+tombstone atomically alongside the item delete rather
+     * than calling this, to keep both writes in ONE Dexie transaction).
+     */
     async deleteByItem(inventoryItemId: string): Promise<void> {
-      await database.stockTransactions.where('inventoryItemId').equals(inventoryItemId).delete()
+      const deletedAt = new Date().toISOString()
+      await database.transaction(
+        'rw',
+        database.stockTransactions,
+        database.rowTombstones,
+        async () => {
+          const cascaded = await database.stockTransactions
+            .where('inventoryItemId')
+            .equals(inventoryItemId)
+            .toArray()
+          if (cascaded.length === 0) return
+          await database.stockTransactions.bulkDelete(cascaded.map((t) => t.id))
+          await database.rowTombstones.bulkPut(
+            cascaded.map((t) => ({ id: t.id, table: 'stockTransactions', deletedAt })),
+          )
+        },
+      )
     },
   }
 }

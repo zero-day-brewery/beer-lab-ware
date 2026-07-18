@@ -15,14 +15,14 @@ describe('backup v7 (seedTombstones + meta)', () => {
     await BrewDB.delete('test-backup-v7')
   })
 
-  it('DUMP_VERSION is 7', () => {
-    expect(DUMP_VERSION).toBe(8)
+  it('DUMP_VERSION is current', () => {
+    expect(DUMP_VERSION).toBe(10)
   })
 
-  it('dump() returns version 7 and includes seedTombstones', async () => {
+  it('dump() returns the current version and includes seedTombstones', async () => {
     await db.seedTombstones.put({ id: 'seed-recipe-1' })
     const dump = await backup.dump()
-    expect(dump.version).toBe(8)
+    expect(dump.version).toBe(10)
     expect(dump.tables).toHaveProperty('seedTombstones')
     expect(dump.tables.seedTombstones).toEqual([{ id: 'seed-recipe-1' }])
   })
@@ -30,8 +30,8 @@ describe('backup v7 (seedTombstones + meta)', () => {
   it('meta records both version counters and correct rowCounts', async () => {
     await db.seedTombstones.put({ id: 'seed-recipe-1' })
     const dump = await backup.dump()
-    expect(dump.meta.dumpVersion).toBe(8)
-    expect(dump.meta.dbVersion).toBe(10)
+    expect(dump.meta.dumpVersion).toBe(10)
+    expect(dump.meta.dbVersion).toBe(12)
     expect(dump.meta.schemaVersion).toBe(1)
     expect(dump.meta.rowCounts.seedTombstones).toBe(1)
   })

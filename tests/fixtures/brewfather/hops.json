@@ -1,0 +1,19 @@
+[
+  {
+    "_id": "bf-inv-hop-citra",
+    "name": "Citra",
+    "type": "Pellet",
+    "alpha": 12.5,
+    "inventory": 250,
+    "use": "Aroma",
+    "costPerAmount": 0.04,
+    "currency": "USD"
+  },
+  {
+    "_id": "bf-inv-hop-saaz",
+    "name": "Saaz",
+    "type": "Pellet",
+    "alpha": 3.5,
+    "inventory": 0
+  }
+]

@@ -20,6 +20,9 @@
 # production
 /build
 
+# daemon single-file bundles (scripts/build-daemon.mjs — rebuild before deploy)
+/dist
+
 # misc
 .DS_Store
 *.pem
@@ -52,3 +55,6 @@ test-results/
 playwright-report/
 # SDD scratch ledger
 .superpowers/
+
+# Local agent/tooling state — never ship
+.claude/

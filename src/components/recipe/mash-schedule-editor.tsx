@@ -1,10 +1,14 @@
 'use client'
 import { useFieldArray, useFormContext } from 'react-hook-form'
+import { UnitNumberInput } from '@/components/ui/unit-number-input'
+import { useDisplayUnits } from '@/hooks/use-display-units'
+import { unitLabel } from '@/lib/brewing/convert/display-units'
 import type { Recipe } from '@/lib/brewing/types/recipe'
 
 export function MashScheduleEditor() {
   const { register, control } = useFormContext<Recipe>()
   const { fields, append, remove } = useFieldArray({ control, name: 'mashSteps' })
+  const units = useDisplayUnits()
 
   return (
     <section className="flex flex-col gap-3">
@@ -50,12 +54,13 @@ export function MashScheduleEditor() {
                   </select>
                 </label>
                 <label className="flex flex-col gap-0.5">
-                  <span className="text-xs">Temperature (°C)</span>
-                  <input
+                  <span className="text-xs">Temperature ({unitLabel('temp', units)})</span>
+                  <UnitNumberInput
                     aria-label="temperature"
-                    type="number"
+                    control={control}
+                    name={`mashSteps.${i}.temperature_C` as const}
+                    kind="temp"
                     step="0.5"
-                    {...register(`mashSteps.${i}.temperature_C` as const, { valueAsNumber: true })}
                     className="rounded border border-input bg-background px-2 py-1 text-sm"
                   />
                 </label>

@@ -18,6 +18,8 @@ afterEach(async () => {
   await Promise.all(dbs.splice(0).map((d) => d.delete().catch(() => {})))
 })
 
+const noopSnapshot = async () => {}
+
 function lot(over: Partial<YeastLot> & { id: string }): YeastLot {
   return {
     name: 'WLP001',
@@ -48,6 +50,7 @@ describe('syncOnce — two devices converge through one transport', () => {
     const rA = await syncOnce({
       transport,
       backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
       now: '2026-06-01T00:00:00.000Z',
     })
     expect(rA.pulled).toBe(false)
@@ -57,6 +60,7 @@ describe('syncOnce — two devices converge through one transport', () => {
     const rB = await syncOnce({
       transport,
       backup: makeBackupService(dbB),
+      snapshot: noopSnapshot,
       now: '2026-06-01T00:01:00.000Z',
     })
     expect(rB.merged).toBe(true)
@@ -64,7 +68,12 @@ describe('syncOnce — two devices converge through one transport', () => {
     expect(bStrains).toEqual(['A-Strain', 'B-Strain'])
 
     // A syncs again (pulls the union → converges)
-    await syncOnce({ transport, backup: makeBackupService(dbA), now: '2026-06-01T00:02:00.000Z' })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
+      now: '2026-06-01T00:02:00.000Z',
+    })
     const aStrains = (await makeYeastLotsRepo(dbA).list()).map((l) => l.strain).sort()
     expect(aStrains).toEqual(['A-Strain', 'B-Strain'])
   })
@@ -83,9 +92,24 @@ describe('syncOnce — two devices converge through one transport', () => {
       lot({ id, strain: 'California Ale', quantity: 9, updatedAt: '2026-06-05T00:00:00.000Z' }),
     )
 
-    await syncOnce({ transport, backup: makeBackupService(dbA), now: '2026-06-02T00:00:00.000Z' })
-    await syncOnce({ transport, backup: makeBackupService(dbB), now: '2026-06-06T00:00:00.000Z' })
-    await syncOnce({ transport, backup: makeBackupService(dbA), now: '2026-06-07T00:00:00.000Z' })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
+      now: '2026-06-02T00:00:00.000Z',
+    })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbB),
+      snapshot: noopSnapshot,
+      now: '2026-06-06T00:00:00.000Z',
+    })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
+      now: '2026-06-07T00:00:00.000Z',
+    })
 
     // B's later edit (quantity 9) wins on both
     expect((await makeYeastLotsRepo(dbA).get(id))?.quantity).toBe(9)
@@ -117,8 +141,18 @@ describe('syncOnce — two devices converge through one transport', () => {
       at: '2026-06-02T00:00:00.000Z',
       schemaVersion: 1,
     })
-    await syncOnce({ transport, backup: makeBackupService(dbA), now: '2026-06-03T00:00:00.000Z' })
-    await syncOnce({ transport, backup: makeBackupService(dbB), now: '2026-06-03T00:01:00.000Z' })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbA),
+      snapshot: noopSnapshot,
+      now: '2026-06-03T00:00:00.000Z',
+    })
+    await syncOnce({
+      transport,
+      backup: makeBackupService(dbB),
+      snapshot: noopSnapshot,
+      now: '2026-06-03T00:01:00.000Z',
+    })
     const ids = (await dbB.stockTransactions.toArray()).map((t) => t.id).sort()
     expect(ids).toEqual([txA, txB].sort())
   })
@@ -133,5 +167,41 @@ describe('syncMetaRepo', () => {
     expect(await repo.lastSyncAt()).toBeNull()
     await repo.setLastSyncAt('2026-06-01T00:00:00.000Z')
     expect(await repo.lastSyncAt()).toBe('2026-06-01T00:00:00.000Z')
+  })
+
+  it('round-trips the connection config (URL, token, mode) and clears on empty string', async () => {
+    const repo = makeSyncMetaRepo(freshDb())
+    expect(await repo.serverUrl()).toBeNull()
+    expect(await repo.token()).toBeNull()
+    expect(await repo.mode()).toBe('two-way') // default
+
+    await repo.setServerUrl('https://brewery.example.com')
+    await repo.setToken('  tok-abc  ') // trimmed
+    await repo.setMode('pull-only')
+    expect(await repo.serverUrl()).toBe('https://brewery.example.com')
+    expect(await repo.token()).toBe('tok-abc')
+    expect(await repo.mode()).toBe('pull-only')
+
+    await repo.setServerUrl('')
+    await repo.setToken('')
+    expect(await repo.serverUrl()).toBeNull()
+    expect(await repo.token()).toBeNull()
+  })
+
+  it('records the last sync outcome and treats a corrupt record as absent', async () => {
+    const database = freshDb()
+    const repo = makeSyncMetaRepo(database)
+    expect(await repo.lastOutcome()).toBeNull()
+    const outcome = {
+      at: '2026-06-01T00:00:00.000Z',
+      mode: 'two-way' as const,
+      ok: true,
+      message: 'Sync complete — pulled + merged + pushed',
+    }
+    await repo.setLastOutcome(outcome)
+    expect(await repo.lastOutcome()).toEqual(outcome)
+
+    await database.appMeta.put({ key: 'sync:lastOutcome', value: { garbage: true } })
+    expect(await repo.lastOutcome()).toBeNull()
   })
 })

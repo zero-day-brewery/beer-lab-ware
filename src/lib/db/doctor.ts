@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { BatchSchema } from '@/lib/brewing/types/batch'
+import { DeviceLinkSchema } from '@/lib/brewing/types/device-link'
 import { EquipmentProfileSchema } from '@/lib/brewing/types/equipment'
 import { GearItemSchema } from '@/lib/brewing/types/gear'
 import { IngredientAnySchema, WaterSchema } from '@/lib/brewing/types/ingredient'
@@ -12,6 +13,7 @@ import { StockTransactionSchema } from '@/lib/brewing/types/stock-transaction'
 import { BrewTimerSchema } from '@/lib/brewing/types/timer'
 import { YeastLotSchema } from '@/lib/brewing/types/yeast-lot'
 import { type BrewDB, db } from '@/lib/db/schema'
+import { tsOf } from '@/lib/sync/merge'
 
 export interface DoctorCheck {
   id: string
@@ -45,6 +47,16 @@ const TABLE_SCHEMAS: Record<string, z.ZodTypeAny> = {
   stockTransactions: StockTransactionSchema,
   seedTombstones: z.object({ id: z.string() }),
   yeastLots: YeastLotSchema,
+  rowTombstones: z.object({
+    id: z.string(),
+    table: z.string(),
+    // Same "parses to a finite timestamp" hardening as backup.ts/brewery-store.ts —
+    // catches a corrupt deletedAt that would otherwise fail open in the sync merge.
+    deletedAt: z.string().refine((s) => Number.isFinite(Date.parse(s)), {
+      message: 'deletedAt must be a parseable timestamp',
+    }),
+  }),
+  deviceLinks: DeviceLinkSchema,
 }
 
 function check(base: Omit<DoctorCheck, 'ok'>, failingIds: string[]): DoctorCheck {
@@ -60,7 +72,7 @@ export async function runDataDoctor(
   database: BrewDB = db,
   expectedVerno: number = db.verno,
 ): Promise<DoctorReport> {
-  const [items, txns, readings, batches, timers, sessions, settingsRows, equipment] =
+  const [items, txns, readings, batches, timers, sessions, settingsRows, equipment, deviceLinks] =
     await Promise.all([
       database.inventoryItems.toArray(),
       database.stockTransactions.toArray(),
@@ -70,6 +82,7 @@ export async function runDataDoctor(
       database.brewSessions.toArray(),
       database.settings.toArray(),
       database.equipmentProfiles.toArray(),
+      database.deviceLinks.toArray(),
     ])
 
   const checks: DoctorCheck[] = []
@@ -194,6 +207,70 @@ export async function runDataDoctor(
     message: 'One or more stored rows fail their Zod schema (would blank a page on read).',
     sampleIds: c7Sample,
   })
+
+  // C8 — tombstone/row coexistence anomaly (read-only diagnosis, no auto-fix).
+  // A live row is a merge-safety violation when a tombstone for the SAME
+  // (table,id) has a `deletedAt` at-or-after the row's own last-write
+  // timestamp — `mergeState`/`mergeLedger` (sync/merge.ts) should have
+  // suppressed that row during a sync merge, so its survival indicates a
+  // merge bug (or a hand-edited/corrupt import), not legitimate
+  // edit-after-delete (which requires row-ts STRICTLY AFTER deletedAt — see
+  // sync-client.ts's "supersede" rule, which drops the tombstone once that's
+  // true; a row newer than its tombstone but the tombstone not yet GC'd is
+  // NOT an anomaly).
+  const tombstoneRows = await database.rowTombstones.toArray()
+  const tombstonesByTable = new Map<string, Map<string, string>>()
+  for (const t of tombstoneRows) {
+    let byId = tombstonesByTable.get(t.table)
+    if (!byId) {
+      byId = new Map()
+      tombstonesByTable.set(t.table, byId)
+    }
+    byId.set(t.id, t.deletedAt)
+  }
+  const c8Fail: string[] = []
+  for (const table of database.tables) {
+    const byId = tombstonesByTable.get(table.name)
+    if (!byId || !TABLE_SCHEMAS[table.name]) continue
+    const rows = await table.toArray()
+    for (const row of rows) {
+      const id = (row as { id?: unknown }).id
+      if (typeof id !== 'string') continue
+      const deletedAtIso = byId.get(id)
+      if (deletedAtIso === undefined) continue
+      if (tsOf(row as Record<string, unknown>) <= Date.parse(deletedAtIso)) {
+        c8Fail.push(`${table.name}:${id}`)
+      }
+    }
+  }
+  checks.push(
+    check(
+      {
+        id: 'C8',
+        label: 'No tombstone/row coexistence anomalies',
+        severity: 'warn',
+        count: 0,
+        message: `A row coexists with a tombstone that should have suppressed it on the next sync merge (merge bug or hand-edited import). ${tombstoneRows.length} tombstone(s) total in the database.`,
+      },
+      c8Fail,
+    ),
+  )
+
+  // C9 — orphan deviceLinks.batchId (sensor-device assignment points at a
+  // missing batch — same shape as C3's readings.batchId check).
+  const c9Fail = deviceLinks.filter((l) => !batchIds.has(l.batchId)).map((l) => l.id)
+  checks.push(
+    check(
+      {
+        id: 'C9',
+        label: 'No orphan device links',
+        severity: 'error',
+        count: 0,
+        message: 'A sensor-device link references a missing batch.',
+      },
+      c9Fail,
+    ),
+  )
 
   const failed = checks.filter((c) => !c.ok).length
   return { checks, passed: checks.length - failed, failed }

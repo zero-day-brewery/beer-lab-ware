@@ -1,0 +1,120 @@
+[
+  {
+    "_id": "bf-recipe-hazy-1",
+    "name": "Hazy Horizon IPA",
+    "type": "All Grain",
+    "author": "Sample Brewer",
+    "batchSize": 20,
+    "boilSize": 24,
+    "boilTime": 60,
+    "efficiency": 72,
+    "og": 1.062,
+    "fg": 1.014,
+    "abv": 6.3,
+    "ibu": 45,
+    "ibuFormula": "tinseth",
+    "color": 11.8,
+    "notes": "Pillowy NEIPA. Keep DO low on transfer.",
+    "tags": ["ipa", "hazy"],
+    "style": { "name": "Hazy IPA", "category": "IPA" },
+    "created": 1735689600000,
+    "searchTags": ["unknown-field-ignored"],
+    "fermentables": [
+      {
+        "_id": "bf-ferm-pale",
+        "name": "Pale Ale Malt",
+        "type": "Grain",
+        "amount": 4.5,
+        "potential": 1.037,
+        "color": 3.5,
+        "origin": "US"
+      },
+      {
+        "_id": "bf-ferm-oats",
+        "name": "Flaked Oats",
+        "type": "Adjunct",
+        "amount": 0.9,
+        "potentialPercentage": 70,
+        "lovibond": 2.2
+      },
+      {
+        "_id": "bf-ferm-honey",
+        "name": "Wildflower Honey",
+        "type": "Honey",
+        "amount": 0.25
+      }
+    ],
+    "hops": [
+      {
+        "_id": "bf-hop-citra-boil",
+        "name": "Citra",
+        "alpha": 12.5,
+        "amount": 20,
+        "use": "Boil",
+        "time": 10,
+        "type": "Pellet"
+      },
+      {
+        "_id": "bf-hop-galaxy-wp",
+        "name": "Galaxy",
+        "alpha": 14,
+        "amount": 40,
+        "use": "Aroma",
+        "time": 20,
+        "type": "Pellet"
+      },
+      {
+        "_id": "bf-hop-citra-dh",
+        "name": "Citra",
+        "alpha": 12.5,
+        "amount": 80,
+        "use": "Dry Hop",
+        "time": 3,
+        "type": "Cryo"
+      }
+    ],
+    "yeasts": [
+      {
+        "name": "London Ale III",
+        "type": "Ale",
+        "form": "Liquid",
+        "amount": 1,
+        "unit": "pkg",
+        "attenuation": 75,
+        "laboratory": "Wyeast",
+        "productId": "1318"
+      }
+    ],
+    "miscs": [
+      {
+        "name": "Calcium Chloride",
+        "type": "Water Agent",
+        "use": "Mash",
+        "amount": 6,
+        "unit": "g",
+        "time": 0
+      },
+      {
+        "name": "Whirlfloc",
+        "type": "Fining",
+        "use": "Boil",
+        "amount": 1,
+        "unit": "items",
+        "time": 15
+      }
+    ],
+    "mash": {
+      "name": "Single Infusion",
+      "steps": [
+        { "name": "Saccharification", "type": "Temperature", "stepTemp": 67, "stepTime": 60 },
+        { "name": "Mash Out", "type": "Temperature", "stepTemp": 76, "stepTime": 10, "rampTime": 7 }
+      ]
+    },
+    "fermentation": {
+      "name": "Ale",
+      "steps": [{ "type": "Primary", "stepTemp": 19, "stepTime": 14 }]
+    },
+    "water": { "total": { "calcium": 100 } },
+    "equipment": { "name": "B40pro", "batchSize": 20 }
+  }
+]

@@ -1,8 +1,10 @@
 'use client'
 import { useMemo } from 'react'
 import { useFormContext, useWatch } from 'react-hook-form'
+import { useDisplayUnits } from '@/hooks/use-display-units'
 import { calculateRecipe } from '@/lib/brewing/calc/pipeline'
 import { srmIsDark, srmToHex } from '@/lib/brewing/calc/srm-color'
+import { formatAmount, formatWithUnit, unitLabel } from '@/lib/brewing/convert/display-units'
 import { B40PRO_PROFILE } from '@/lib/brewing/defaults/b40pro'
 import { calcStepInfusions } from '@/lib/brewing/mash/step-infusions'
 import { findStyle } from '@/lib/brewing/styles/bjcp-2021'
@@ -20,6 +22,7 @@ export function CalculationPanel() {
   const { profiles } = useEquipmentStore()
   const { settings } = useSettingsStore()
   const gravityUnit = settings?.gravityUnit ?? 'sg'
+  const units = useDisplayUnits()
   const equipment = profiles.find((p) => p.id === recipe.equipmentProfileId) ?? fallbackEquipment
   const style = recipe.styleId ? findStyle(recipe.styleId) : undefined
 
@@ -107,44 +110,46 @@ export function CalculationPanel() {
       </div>
 
       <div className="calc-block">
-        <div className="calc-block-title">Volumes (L)</div>
+        <div className="calc-block-title">Volumes ({unitLabel('volume', units)})</div>
         <dl className="calc-rows">
           <div>
             <dt>Pre-boil</dt>
-            <dd>{result.volumes.preBoilVolume_L.toFixed(2)}</dd>
+            <dd>{formatAmount(result.volumes.preBoilVolume_L, 'volume', units)}</dd>
           </div>
           <div>
             <dt>Post-boil</dt>
-            <dd>{result.volumes.postBoilVolume_L.toFixed(2)}</dd>
+            <dd>{formatAmount(result.volumes.postBoilVolume_L, 'volume', units)}</dd>
           </div>
           <div>
             <dt>Into fermenter</dt>
-            <dd>{result.volumes.intoFermenter_L.toFixed(2)}</dd>
+            <dd>{formatAmount(result.volumes.intoFermenter_L, 'volume', units)}</dd>
           </div>
           <div>
             <dt>Mash water</dt>
-            <dd>{result.volumes.mashWater_L.toFixed(2)}</dd>
+            <dd>{formatAmount(result.volumes.mashWater_L, 'volume', units)}</dd>
           </div>
           <div>
             <dt>Sparge</dt>
-            <dd>{result.volumes.spargeWater_L.toFixed(2)}</dd>
+            <dd>{formatAmount(result.volumes.spargeWater_L, 'volume', units)}</dd>
           </div>
         </dl>
       </div>
 
       <div className="calc-block">
         <div className="calc-block-title">Strike temp</div>
-        <div className="calc-strike">{result.strikeTemp_C.toFixed(1)} °C</div>
+        <div className="calc-strike">{formatWithUnit(result.strikeTemp_C, 'temp', units, 1)}</div>
       </div>
 
       {stepInfusions.length > 0 && (
         <div className="calc-block">
-          <div className="calc-block-title">Step infusions (L @ 100 °C)</div>
+          <div className="calc-block-title">
+            Step infusions ({unitLabel('volume', units)} @ {formatWithUnit(100, 'temp', units, 0)})
+          </div>
           <dl className="calc-rows">
             {stepInfusions.map((s) => (
               <div key={s.stepIndex}>
                 <dt>{recipe.mashSteps[s.stepIndex]?.name ?? `Step ${s.stepIndex + 1}`}</dt>
-                <dd>+{(s.water_L as number).toFixed(2)}</dd>
+                <dd>+{formatAmount(s.water_L as number, 'volume', units)}</dd>
               </div>
             ))}
           </dl>

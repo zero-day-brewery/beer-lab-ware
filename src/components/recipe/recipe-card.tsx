@@ -1,7 +1,11 @@
+'use client'
 import Link from 'next/link'
+import { useDisplayUnits } from '@/hooks/use-display-units'
+import { formatForInput, unitLabel } from '@/lib/brewing/convert/display-units'
 import type { Recipe } from '@/lib/brewing/types/recipe'
 
 export function RecipeCard({ recipe }: { recipe: Recipe }) {
+  const units = useDisplayUnits()
   return (
     <Link
       href={`/recipes/view/?id=${recipe.id}`}
@@ -20,7 +24,8 @@ export function RecipeCard({ recipe }: { recipe: Recipe }) {
         </span>
       </div>
       <p className="mt-2 text-sm text-muted-foreground">
-        {recipe.batchSize_L}L batch · {recipe.boilTime_min}min boil
+        {formatForInput(recipe.batchSize_L, 'volume', units)}
+        {unitLabel('volume', units)} batch · {recipe.boilTime_min}min boil
       </p>
       {recipe.tags && recipe.tags.length > 0 && (
         <div className="chip-row mt-3">

@@ -1,0 +1,22 @@
+[
+  {
+    "_id": "bf-inv-yeast-1318",
+    "name": "London Ale III",
+    "type": "Ale",
+    "form": "Liquid",
+    "laboratory": "Wyeast",
+    "productId": "1318",
+    "inventory": 2,
+    "unit": "pkg",
+    "attenuation": 75
+  },
+  {
+    "_id": "bf-inv-yeast-us05",
+    "name": "Safale US-05",
+    "type": "Ale",
+    "form": "Dry",
+    "laboratory": "Fermentis",
+    "productId": "US-05",
+    "inventory": 3
+  }
+]

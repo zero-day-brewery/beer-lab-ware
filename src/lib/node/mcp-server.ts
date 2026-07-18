@@ -22,6 +22,11 @@
  *     returns a summary of exactly what changed. The client's approval IS the
  *     confirm gate — mirroring how Claude Code gates risky tools.
  *
+ *   READ-ONLY MODE — env `MCP_READ_ONLY=1` (or `true`) skips registering the 4
+ *   write tools entirely: they're absent from `tools/list`, not merely disabled
+ *   behind a runtime check. Read tools are unaffected. Default is unchanged
+ *   (writes registered).
+ *
  * SAFETY
  *   - Writes go through `applyAction` ONLY (re-validates the payload, dispatches to
  *     the atomic repo helper) and persist to the file via the Stage A adapter's
@@ -157,12 +162,25 @@ function writeMapping(
   return { def, handler }
 }
 
+export interface BuildMcpToolsOptions {
+  /**
+   * When true, the 4 `propose_*`-backed write tools are NOT built at all — they
+   * are absent from `tools/list` and have no handler, not merely rejected at
+   * call time. Read tools are unaffected. Default false (writes registered).
+   */
+  readOnly?: boolean
+}
+
 /**
  * Build the MCP tool-mapping layer over an open brewery: the engine's read tools
- * (1:1) plus the propose tools re-exposed as mutating writes. Pure + injectable —
- * tests drive it over a fixture-file adapter with no transport.
+ * (1:1) plus — unless `readOnly` — the propose tools re-exposed as mutating
+ * writes. Pure + injectable — tests drive it over a fixture-file adapter with no
+ * transport.
  */
-export function buildMcpTools(adapter: BreweryAdapter): McpToolMapping {
+export function buildMcpTools(
+  adapter: BreweryAdapter,
+  opts: BuildMcpToolsOptions = {},
+): McpToolMapping {
   const tools: Tool[] = []
   const handlers = new Map<string, ToolHandler>()
 
@@ -171,12 +189,20 @@ export function buildMcpTools(adapter: BreweryAdapter): McpToolMapping {
     tools.push(def)
     handlers.set(def.name, handler)
   }
-  for (const proposeTool of buildWriteTools(adapter.toolDeps)) {
-    const { def, handler } = writeMapping(proposeTool, adapter)
-    tools.push(def)
-    handlers.set(def.name, handler)
+  if (!opts.readOnly) {
+    for (const proposeTool of buildWriteTools(adapter.toolDeps)) {
+      const { def, handler } = writeMapping(proposeTool, adapter)
+      tools.push(def)
+      handlers.set(def.name, handler)
+    }
   }
   return { tools, handlers }
+}
+
+/** Parse `MCP_READ_ONLY` (`1` or `true`, case-insensitive) from the environment. */
+export function isReadOnlyModeEnv(env: Record<string, string | undefined> = process.env): boolean {
+  const v = (env.MCP_READ_ONLY ?? '').trim().toLowerCase()
+  return v === '1' || v === 'true'
 }
 
 /**
@@ -184,10 +210,14 @@ export function buildMcpTools(adapter: BreweryAdapter): McpToolMapping {
  * brewery. Registers ListTools (advertises the mapped tools) + CallTool (dispatch
  * through the mutex; unknown tool → error result). Transport is attached by the
  * caller (`server.connect(transport)`), so this is unit-testable in-process over
- * an in-memory transport.
+ * an in-memory transport. `opts.readOnly` (see {@link buildMcpTools}) drops the
+ * write tools from registration entirely.
  */
-export function createBreweryMcpServer(adapter: BreweryAdapter): Server {
-  const { tools, handlers } = buildMcpTools(adapter)
+export function createBreweryMcpServer(
+  adapter: BreweryAdapter,
+  opts: BuildMcpToolsOptions = {},
+): Server {
+  const { tools, handlers } = buildMcpTools(adapter, opts)
   const runExclusive = createMutex()
 
   const server = new Server(
@@ -197,7 +227,9 @@ export function createBreweryMcpServer(adapter: BreweryAdapter): Server {
       instructions:
         `Beer-Lab-Ware — brewery over ${adapter.store.filePath}. ` +
         'Read tools (list_recipes, get_recipe, calc_recipe, inventory_report, …) are safe. ' +
-        'Write tools (scale_recipe, create_recipe, log_reading, adjust_inventory) MUTATE brewery.json and require approval.',
+        (opts.readOnly
+          ? 'Running in read-only mode (MCP_READ_ONLY) — write tools are not registered.'
+          : 'Write tools (scale_recipe, create_recipe, log_reading, adjust_inventory) MUTATE brewery.json and require approval.'),
     },
   )
 
@@ -246,11 +278,13 @@ export async function main(): Promise<void> {
     return
   }
 
-  const server = createBreweryMcpServer(adapter)
+  const readOnly = isReadOnlyModeEnv()
+  const server = createBreweryMcpServer(adapter, { readOnly })
   const transport = new StdioServerTransport()
   await server.connect(transport)
   process.stderr.write(
-    `beer-lab-ware MCP server ready over stdio (brewery: ${adapter.store.filePath}).\n`,
+    `beer-lab-ware MCP server ready over stdio (brewery: ${adapter.store.filePath})` +
+      `${readOnly ? ' [read-only]' : ''}.\n`,
   )
 }
 
