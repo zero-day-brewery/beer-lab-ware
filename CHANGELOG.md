@@ -19,6 +19,15 @@ All notable changes to Beer-Lab-Ware are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-07-18
+
+Commercial-grade hardening. Dexie schema **v12**, backup envelope **DumpV10**,
+2,157 unit/integration tests, Playwright e2e, build-time hash CSP, CodeQL +
+Dependabot + DCO in CI. Headline: multi-device sync is now reachable and safe
+from the UI, automatic Tilt/iSpindel/RAPT sensor ingestion (self-hosted tier),
+imperial units app-wide, per-batch COGS, Brewfather migration, and a full
+legal/governance layer (TERMS, PRIVACY, SECURITY, trademark policy).
+
 ### Added
 - **Automatic hydrometer/sensor reading ingestion** *(self-hosted sync tier)*.
   The sync daemon now accepts `POST /readings` — link a Tilt (via
