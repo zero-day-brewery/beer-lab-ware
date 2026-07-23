@@ -1,0 +1,581 @@
+<!--
+  Beer-Lab-Ware — System Architecture (canonical, self-contained web visual)
+  ---------------------------------------------------------------------------
+  LIVING architecture map. Edit the panels in <body> as the app evolves; each
+  is comment-tagged (01 SYSTEM / 02 LIFECYCLE / 03 SENSOR / 04 INTERNALS /
+  05 CAVEATS). Bump data-rev on <body> when you change it. Self-contained
+  (inline CSS, system-mono stack, no external requests) — open by double-click
+  or serve statically. The hosted artifact is a published view of this file.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Beer-Lab-Ware system architecture and data-flow map — three runtimes over one DumpV10 envelope.">
+<title>Beer-Lab-Ware — System Architecture</title>
+<style>
+
+  /* ============ TOKENS — dark = default (the instrument panel) ============ */
+  :root{
+    --bg:#0b0e11; --grid:#0e131a;
+    --panel:#141a20; --panel-2:#10151b; --panel-3:#0d1218;
+    --seam:#232b34; --seam-2:#2f3b47;
+    --ink:#dce6ee; --dim:#8f9daa; --faint:#5d6a76;
+    --cyan:#2ee6ff; --cyan-2:#1aa7bd;
+    --wort:#ffab2d; --wort-2:#c47f16;
+    --hop:#79f06a; --ember:#ff5340;
+    --radius:0.4rem;
+    --machine:var(--cyan); --data:var(--wort);
+    --sheen:rgba(255,255,255,.05);
+    --shadow:0 1px 0 rgba(255,255,255,.04), 0 10px 30px -14px rgba(0,0,0,.8);
+    --engrave:0 1px 0 rgba(255,255,255,.06), 0 -1px 1px rgba(0,0,0,.7);
+    color-scheme:dark;
+  }
+  @media (prefers-color-scheme:light){
+    :root{
+      --bg:#e7ecf1; --grid:#dde4ea;
+      --panel:#ffffff; --panel-2:#f4f7fa; --panel-3:#eef2f6;
+      --seam:#d2dae2; --seam-2:#bac6d0;
+      --ink:#16202a; --dim:#54636f; --faint:#8b98a4;
+      --cyan:#0b6d82; --cyan-2:#0a5566;
+      --wort:#a96905; --wort-2:#864f00;
+      --hop:#2f8f3d; --ember:#cf3524;
+      --sheen:rgba(0,0,0,.02);
+      --shadow:0 1px 0 rgba(255,255,255,.6), 0 12px 26px -16px rgba(20,40,60,.35);
+      --engrave:0 1px 0 rgba(255,255,255,.7);
+      color-scheme:light;
+    }
+  }
+  /* explicit toggle wins in both directions */
+  :root[data-theme="light"]{
+    --bg:#e7ecf1; --grid:#dde4ea;
+    --panel:#ffffff; --panel-2:#f4f7fa; --panel-3:#eef2f6;
+    --seam:#d2dae2; --seam-2:#bac6d0;
+    --ink:#16202a; --dim:#54636f; --faint:#8b98a4;
+    --cyan:#0b6d82; --cyan-2:#0a5566;
+    --wort:#a96905; --wort-2:#864f00;
+    --hop:#2f8f3d; --ember:#cf3524;
+    --sheen:rgba(0,0,0,.02);
+    --shadow:0 1px 0 rgba(255,255,255,.6), 0 12px 26px -16px rgba(20,40,60,.35);
+    --engrave:0 1px 0 rgba(255,255,255,.7);
+    color-scheme:light;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0b0e11; --grid:#0e131a;
+    --panel:#141a20; --panel-2:#10151b; --panel-3:#0d1218;
+    --seam:#232b34; --seam-2:#2f3b47;
+    --ink:#dce6ee; --dim:#8f9daa; --faint:#5d6a76;
+    --cyan:#2ee6ff; --cyan-2:#1aa7bd;
+    --wort:#ffab2d; --wort-2:#c47f16;
+    --hop:#79f06a; --ember:#ff5340;
+    --sheen:rgba(255,255,255,.05);
+    --shadow:0 1px 0 rgba(255,255,255,.04), 0 10px 30px -14px rgba(0,0,0,.8);
+    --engrave:0 1px 0 rgba(255,255,255,.06), 0 -1px 1px rgba(0,0,0,.7);
+    color-scheme:dark;
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0}
+  .doc{
+    font-family:"Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    background:var(--bg); color:var(--ink);
+    line-height:1.5; letter-spacing:.01em;
+    min-height:100vh; position:relative; overflow-x:hidden;
+    padding:clamp(18px,4vw,52px) clamp(14px,4vw,40px) 64px;
+  }
+  /* brushed-steel + CRT atmosphere, scoped, subtle */
+  .atmos{position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:
+      radial-gradient(120% 80% at 88% -8%, color-mix(in oklab, var(--cyan) 14%, transparent), transparent 60%),
+      radial-gradient(120% 90% at 6% 118%, color-mix(in oklab, var(--wort) 12%, transparent), transparent 62%);
+  }
+  .atmos::after{content:""; position:absolute; inset:0; opacity:.5;
+    background:repeating-linear-gradient(0deg, transparent 0 2px, color-mix(in oklab, var(--ink) 4%, transparent) 2px 3px);
+    mix-blend-mode:overlay;
+  }
+  @media (prefers-color-scheme:light){ .atmos::after{opacity:.25} }
+  .wrap{position:relative; z-index:1; max-width:1120px; margin:0 auto}
+
+  /* ============ TYPE PRIMITIVES ============ */
+  .display{
+    font-family:"Archivo","Archivo Black", ui-sans-serif,"Helvetica Neue",sans-serif;
+    font-weight:900; text-transform:uppercase; line-height:1.02;
+    letter-spacing:.005em; text-wrap:balance; text-shadow:var(--engrave);
+  }
+  .mono{font-family:"GeistMono", ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums}
+  .eyebrow{
+    font-family:"Archivo", ui-sans-serif, sans-serif;
+    font-weight:800; text-transform:uppercase; letter-spacing:.22em;
+    font-size:.66rem; color:color-mix(in oklab, var(--cyan) 60%, var(--dim));
+  }
+  .eyebrow.wort{color:color-mix(in oklab, var(--wort) 62%, var(--dim))}
+
+  /* ============ MASTHEAD ============ */
+  header.mast{
+    display:flex; flex-wrap:wrap; gap:20px 28px; align-items:flex-end;
+    justify-content:space-between; padding-bottom:22px; margin-bottom:30px;
+    border-bottom:1px solid var(--seam);
+  }
+  .brand{display:flex; align-items:center; gap:14px}
+  .glyph{
+    width:44px; height:44px; flex:0 0 auto; border-radius:var(--radius);
+    border:1px solid var(--seam-2); background:
+      linear-gradient(150deg, color-mix(in oklab,var(--cyan) 20%, var(--panel)), var(--panel-3));
+    display:grid; place-items:center; box-shadow:var(--shadow);
+    position:relative;
+  }
+  .glyph::before{content:""; position:absolute; inset:0; border-radius:inherit;
+    box-shadow:inset 0 1px 0 var(--sheen)}
+  .glyph svg{width:24px; height:24px}
+  h1.title{margin:0; font-size:clamp(1.5rem,3.4vw,2.35rem)}
+  .title .sub{display:block; font:inherit; color:var(--dim); font-size:.6em; letter-spacing:.24em; font-weight:800; margin-top:4px}
+  .thesis{max-width:52ch; margin:14px 0 0; color:var(--dim); font-size:1rem}
+  .thesis b{color:var(--ink); font-weight:600}
+  .keyfacts{display:flex; flex-wrap:wrap; gap:8px; margin-top:2px}
+  .fact{
+    font-family:"GeistMono",ui-monospace,monospace; font-size:.72rem; letter-spacing:.02em;
+    color:var(--ink); background:var(--panel-2); border:1px solid var(--seam);
+    padding:6px 10px; border-radius:var(--radius); white-space:nowrap;
+  }
+  .fact b{color:var(--cyan); font-weight:600}
+  .fact.w b{color:var(--wort)}
+
+  /* ============ SECTIONS ============ */
+  section{margin-top:44px}
+  .sec-head{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:6px}
+  .sec-head h2{margin:0; font-size:clamp(1.1rem,2.2vw,1.5rem)}
+  .sec-head .n{font-family:"GeistMono",monospace; color:var(--faint); font-size:.85rem; font-weight:500}
+  .sec-sub{color:var(--dim); margin:0 0 20px; max-width:74ch; font-size:.95rem}
+
+  /* ============ GENERIC NODE / PANEL ============ */
+  .panel{background:var(--panel); border:1px solid var(--seam); border-radius:var(--radius);
+    box-shadow:var(--shadow); position:relative}
+  .panel::after{content:""; position:absolute; inset:0 0 auto 0; height:1px; border-radius:inherit;
+    background:var(--sheen)}
+  .node{
+    background:var(--panel-2); border:1px solid var(--seam);
+    border-left:3px solid var(--seam-2); border-radius:var(--radius);
+    padding:14px 15px; position:relative;
+  }
+  .node .kicker{display:flex; align-items:center; gap:8px; margin-bottom:6px}
+  .node .kicker .dot{width:8px; height:8px; border-radius:2px; flex:0 0 auto}
+  .node h3{margin:0; font-size:.95rem; font-weight:700; letter-spacing:.01em}
+  .node .role{font-family:"GeistMono",monospace; font-size:.66rem; color:var(--faint); text-transform:uppercase; letter-spacing:.12em}
+  .node p{margin:8px 0 0; font-size:.83rem; color:var(--dim)}
+  .node .tags{display:flex; flex-wrap:wrap; gap:5px; margin-top:10px}
+  .tag{font-family:"GeistMono",monospace; font-size:.66rem; color:var(--ink);
+    background:var(--panel-3); border:1px solid var(--seam); padding:3px 7px; border-radius:4px}
+  .node.machine{border-left-color:var(--cyan)}
+  .node.machine .dot{background:var(--cyan); box-shadow:0 0 8px color-mix(in oklab,var(--cyan) 60%, transparent)}
+  .node.machine .role{color:color-mix(in oklab,var(--cyan) 55%, var(--faint))}
+  .node.data{border-left-color:var(--wort)}
+  .node.data .dot{background:var(--wort); box-shadow:0 0 8px color-mix(in oklab,var(--wort) 55%, transparent)}
+  .node.data .role{color:color-mix(in oklab,var(--wort) 55%, var(--faint))}
+
+  /* ============ SYSTEM MAP (hero) ============ */
+  .system{padding:clamp(16px,2.6vw,26px)}
+  .actors, .runtimes{display:grid; gap:14px}
+  .actors{grid-template-columns:1fr 1fr 1fr; margin-bottom:0}
+  .runtimes{grid-template-columns:1fr auto 1.25fr auto 1fr; align-items:stretch; margin:6px 0}
+  .actor{
+    text-align:center; padding:11px 12px; border:1px dashed var(--seam-2); border-radius:var(--radius);
+    background:color-mix(in oklab, var(--panel-2) 70%, transparent);
+  }
+  .actor .who{font-weight:700; font-size:.86rem}
+  .actor .how{font-family:"GeistMono",monospace; font-size:.66rem; color:var(--faint); margin-top:3px; letter-spacing:.04em}
+  /* vertical drop from actor to runtime */
+  .drop{display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin:2px 0}
+  .drop .v{position:relative; height:26px}
+  .drop .v span{position:absolute; left:50%; top:0; bottom:0; width:2px; transform:translateX(-50%);
+    background:linear-gradient(var(--cyan-2),color-mix(in oklab,var(--cyan) 30%, transparent))}
+  .drop .v::after{content:""; position:absolute; left:50%; bottom:-1px; transform:translateX(-50%);
+    border:5px solid transparent; border-top-color:var(--cyan-2); border-bottom:0}
+  .drop .v.w span{background:linear-gradient(var(--wort-2),color-mix(in oklab,var(--wort) 30%, transparent))}
+  .drop .v.w::after{border-top-color:var(--wort-2)}
+  .drop .v .lbl{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    background:var(--bg); padding:0 6px; font-family:"GeistMono",monospace; font-size:.6rem;
+    color:var(--faint); white-space:nowrap; letter-spacing:.03em}
+
+  /* horizontal conduits between runtimes */
+  .conduit{align-self:center; min-width:96px; text-align:center; position:relative; padding:0 4px}
+  .conduit .line{height:2px; border-radius:2px; position:relative;
+    background:linear-gradient(90deg, var(--cyan-2), var(--cyan), var(--cyan-2));
+    background-size:200% 100%;}
+  .conduit .line.flow{animation:flow 2.4s linear infinite}
+  .conduit.dashed .line{background:none; border-top:2px dashed var(--wort-2)}
+  .conduit .cap{position:absolute; top:50%; width:0; height:0; transform:translateY(-50%)}
+  .conduit .cap.r{right:0; border:6px solid transparent; border-left-color:var(--cyan); border-right:0}
+  .conduit .cap.l{left:0; border:6px solid transparent; border-right-color:var(--cyan); border-left:0}
+  .conduit.dashed .cap.l{border-right-color:var(--wort)}
+  .conduit .txt{font-family:"GeistMono",monospace; font-size:.63rem; color:var(--ink); margin-bottom:6px; letter-spacing:.02em; line-height:1.25}
+  .conduit .txt small{color:var(--faint); display:block; font-size:.9em}
+  .conduit.dashed .txt{color:color-mix(in oklab,var(--wort) 60%, var(--ink))}
+
+  @keyframes flow{to{background-position:-200% 0}}
+  @media (prefers-reduced-motion:reduce){ .conduit .line.flow{animation:none} .pulse{animation:none!important} }
+
+  /* the runtime cards a bit taller */
+  .runtimes .node{display:flex; flex-direction:column}
+  .runtimes .node .inner{margin-top:10px; padding:9px; border:1px solid var(--seam); border-radius:5px;
+    background:var(--panel-3)}
+  .runtimes .node .inner .il{font-family:"GeistMono",monospace; font-size:.62rem; color:var(--wort); letter-spacing:.1em; text-transform:uppercase}
+  .runtimes .node .inner .iv{font-size:.8rem; font-weight:600; margin-top:2px}
+
+  /* the shared data spine */
+  .spine-ties{display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin:2px 0}
+  .spine-ties .v{position:relative; height:22px}
+  .spine-ties .v span{position:absolute; left:50%; top:0; bottom:0; width:2px; transform:translateX(-50%);
+    background:color-mix(in oklab,var(--wort) 45%, transparent)}
+  .spine-ties .v .lbl{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    background:var(--bg); padding:0 6px; font-family:"GeistMono",monospace; font-size:.58rem; color:var(--faint); white-space:nowrap}
+  .spine{
+    border:1px solid var(--wort-2); border-radius:var(--radius);
+    background:linear-gradient(180deg, color-mix(in oklab,var(--wort) 12%, var(--panel)), var(--panel-2));
+    padding:16px 18px; position:relative; overflow:hidden;
+  }
+  .spine::before{content:""; position:absolute; inset:0 auto 0 0; width:4px; background:var(--wort)}
+  .spine .st{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+  .spine .st h3{margin:0; font-size:1rem}
+  .spine .st .v{font-family:"GeistMono",monospace; color:var(--wort); font-weight:600; font-size:.85rem}
+  .spine .st .m{font-family:"GeistMono",monospace; color:var(--faint); font-size:.7rem; margin-left:auto}
+  .spine p{margin:6px 0 12px; color:var(--dim); font-size:.85rem}
+  .tables{display:flex; flex-wrap:wrap; gap:6px}
+  .tables span{font-family:"GeistMono",monospace; font-size:.68rem; color:var(--ink);
+    background:color-mix(in oklab,var(--wort) 10%, var(--panel-3)); border:1px solid color-mix(in oklab,var(--wort) 22%, var(--seam));
+    padding:3px 8px; border-radius:4px}
+
+  /* ============ LIFECYCLE ============ */
+  .flowrow{display:flex; gap:0; flex-wrap:wrap; align-items:stretch}
+  .step{
+    flex:1 1 150px; min-width:150px; background:var(--panel); border:1px solid var(--seam);
+    border-radius:var(--radius); padding:14px; position:relative; box-shadow:var(--shadow);
+  }
+  .step .num{font-family:"GeistMono",monospace; font-size:.7rem; color:var(--cyan); font-weight:600; letter-spacing:.1em}
+  .step h3{margin:6px 0 0; font-size:.92rem; font-weight:700}
+  .step p{margin:6px 0 0; font-size:.78rem; color:var(--dim)}
+  .step .repo{font-family:"GeistMono",monospace; font-size:.64rem; color:var(--wort-2); margin-top:9px; display:block}
+  .arrow{flex:0 0 26px; align-self:center; display:grid; place-items:center; color:var(--seam-2)}
+  .arrow svg{width:20px; height:20px}
+  @media (max-width:620px){ .arrow{flex-basis:100%; height:22px; transform:rotate(90deg)} }
+
+  /* ============ SENSOR INGESTION ============ */
+  .ingest{display:grid; grid-template-columns:1fr; gap:0}
+  .pipe{display:flex; flex-direction:column; gap:0}
+  .stage{display:flex; align-items:stretch; gap:14px}
+  .stage .bead{flex:0 0 34px; display:flex; flex-direction:column; align-items:center}
+  .stage .bead .b{width:13px; height:13px; border-radius:50%; background:var(--panel);
+    border:2px solid var(--cyan); margin-top:16px; position:relative}
+  .stage .bead .b.data{border-color:var(--wort)}
+  .stage .bead .ln{flex:1; width:2px; background:var(--seam-2); margin:4px 0}
+  .stage:last-child .bead .ln{display:none}
+  .stage .body{flex:1; padding-bottom:16px}
+  .stage .body .lead{display:flex; gap:10px; align-items:baseline; flex-wrap:wrap}
+  .stage .body h3{margin:0; font-size:.9rem; font-weight:700}
+  .stage .body .ep{font-family:"GeistMono",monospace; font-size:.72rem; color:var(--cyan);
+    background:var(--panel-2); border:1px solid var(--seam); padding:2px 7px; border-radius:4px}
+  .stage .body p{margin:5px 0 0; font-size:.8rem; color:var(--dim)}
+  .guards{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px}
+  .guard{font-family:"GeistMono",monospace; font-size:.65rem; color:var(--ink);
+    background:var(--panel-3); border:1px solid var(--seam); padding:3px 7px; border-radius:4px}
+  .outcomes{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:10px}
+  .outcome{border:1px solid var(--seam); border-radius:var(--radius); padding:11px 12px; background:var(--panel-2);
+    border-top:3px solid var(--seam-2)}
+  .outcome .code{font-family:"GeistMono",monospace; font-weight:600; font-size:.9rem; letter-spacing:.02em}
+  .outcome .st{font-family:"GeistMono",monospace; font-size:.66rem; text-transform:uppercase; letter-spacing:.1em; color:var(--faint); margin-top:1px}
+  .outcome p{margin:7px 0 0; font-size:.76rem; color:var(--dim)}
+  .outcome.ok{border-top-color:var(--hop)} .outcome.ok .code{color:var(--hop)}
+  .outcome.hold{border-top-color:var(--wort)} .outcome.hold .code{color:var(--wort)}
+  .outcome.bad{border-top-color:var(--ember)} .outcome.bad .code{color:var(--ember)}
+
+  /* ============ INTERNALS GRID ============ */
+  .grid-cards{display:grid; grid-template-columns:repeat(auto-fill,minmax(232px,1fr)); gap:12px}
+  .card{background:var(--panel); border:1px solid var(--seam); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow)}
+  .card .h{display:flex; align-items:center; gap:8px; margin-bottom:7px}
+  .card .h .i{width:9px; height:9px; border-radius:2px; background:var(--cyan); flex:0 0 auto}
+  .card .h.w .i{background:var(--wort)}
+  .card .h h3{margin:0; font-size:.85rem; font-weight:700}
+  .card p{margin:0; font-size:.79rem; color:var(--dim)}
+  .card code{font-family:"GeistMono",monospace; font-size:.9em; color:var(--ink);
+    background:var(--panel-3); padding:1px 5px; border-radius:3px; border:1px solid var(--seam)}
+
+  /* ============ CAVEATS ============ */
+  .caveats{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px}
+  .caveat{border:1px solid var(--seam); border-left:3px solid var(--ember); border-radius:var(--radius);
+    background:color-mix(in oklab, var(--ember) 6%, var(--panel)); padding:13px 14px}
+  .caveat h3{margin:0 0 5px; font-size:.84rem; font-weight:700}
+  .caveat p{margin:0; font-size:.79rem; color:var(--dim)}
+  .caveat.info{border-left-color:var(--cyan); background:color-mix(in oklab,var(--cyan) 6%, var(--panel))}
+
+  /* ============ LEGEND / FOOTER ============ */
+  .legend{display:flex; flex-wrap:wrap; gap:16px 22px; align-items:center; margin-top:26px;
+    padding:14px 16px; border:1px solid var(--seam); border-radius:var(--radius); background:var(--panel-2)}
+  .leg{display:flex; align-items:center; gap:8px; font-size:.76rem; color:var(--dim)}
+  .leg .sw{width:22px; height:12px; border-radius:3px; flex:0 0 auto}
+  .leg .sw.cy{background:var(--cyan)} .leg .sw.wo{background:var(--wort)}
+  .leg .sw.dash{background:none; border-top:2px dashed var(--wort); height:2px; border-radius:0; align-self:center}
+  .leg .sw.hop{background:var(--hop)} .leg .sw.em{background:var(--ember)}
+  footer.foot{margin-top:34px; padding-top:18px; border-top:1px solid var(--seam);
+    display:flex; flex-wrap:wrap; gap:8px 18px; justify-content:space-between; align-items:center;
+    color:var(--faint); font-size:.74rem}
+  footer.foot .mono{color:var(--dim)}
+  footer.foot a{color:var(--cyan); text-decoration:none}
+  footer.foot a:hover{text-decoration:underline}
+
+  a:focus-visible, .step:focus-visible{outline:2px solid var(--cyan); outline-offset:2px; border-radius:var(--radius)}
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-width:860px){
+    .runtimes{grid-template-columns:1fr}
+    .conduit{min-width:0; padding:6px 0}
+    .conduit .line{width:60%; margin:0 auto; height:2px}
+    .conduit .cap{display:none}
+    .conduit .line.vert{width:2px; height:22px}
+    .actors, .drop, .spine-ties{grid-template-columns:1fr}
+    .drop .v, .spine-ties .v{height:20px}
+    .outcomes{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body data-rev="1 · 2026-07-23">
+<div class="doc">
+  <div class="atmos" aria-hidden="true"></div>
+  <div class="wrap">
+
+    <!-- ===================== MASTHEAD ===================== -->
+    <header class="mast">
+      <div>
+        <div class="brand">
+          <div class="glyph" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 3h6M10 3v4.5L6.5 15a3 3 0 0 0 2.7 4.3h5.6A3 3 0 0 0 17.5 15L14 7.5V3"/>
+              <path d="M8 12.5h8" stroke="var(--wort)"/>
+              <circle cx="10.5" cy="15.5" r="1" fill="var(--wort)" stroke="none"/>
+              <circle cx="13.5" cy="17" r=".8" fill="var(--wort)" stroke="none"/>
+            </svg>
+          </div>
+          <h1 class="title display">Beer-Lab-Ware<span class="sub">System Architecture &amp; Flow</span></h1>
+        </div>
+        <p class="thesis">A local-first homebrewing PWA — <b>no account, no server, nothing phones home</b>. Under the hood it's <b>three cooperating runtimes over one shared data envelope</b>: the machine is cold, the wort is warm.</p>
+      </div>
+      <div class="keyfacts">
+        <span class="fact"><b>local-first</b> · static PWA</span>
+        <span class="fact">Next.js <b>output: 'export'</b></span>
+        <span class="fact w">source of truth · <b>IndexedDB</b></span>
+        <span class="fact w">1 shape · <b>DumpV10</b></span>
+        <span class="fact">offline-capable</span>
+      </div>
+    </header>
+
+    <!-- ===================== 1 · SYSTEM MAP ===================== -->
+    <section aria-labelledby="s1">
+      <div class="sec-head">
+        <span class="n mono">01</span>
+        <h2 id="s1" class="display">The System</h2>
+        <span class="eyebrow">three runtimes · one envelope</span>
+      </div>
+      <p class="sec-sub">Every runtime reads and writes the <em>same</em> Zod-validated data shape. The browser is the default and only thing most users ever run; the daemon and MCP server are optional tiers that speak the identical envelope.</p>
+
+      <div class="system panel">
+        <!-- actors -->
+        <div class="actors">
+          <div class="actor"><div class="who">AI clients</div><div class="how">Claude Code · Desktop · Cursor</div></div>
+          <div class="actor"><div class="who">You</div><div class="how">install · brew · offline</div></div>
+          <div class="actor"><div class="who">Sensors &amp; bridges</div><div class="how">Tilt · iSpindel · RAPT · script</div></div>
+        </div>
+        <div class="drop" aria-hidden="true">
+          <div class="v"><span></span><span class="lbl">stdio</span></div>
+          <div class="v w"><span></span><span class="lbl">runs in browser</span></div>
+          <div class="v w"><span></span><span class="lbl">POST /readings</span></div>
+        </div>
+
+        <!-- runtimes -->
+        <div class="runtimes">
+          <div class="node machine">
+            <div class="kicker"><span class="dot"></span><span class="role">Node · stdio</span></div>
+            <h3>MCP Server</h3>
+            <p>Exposes an exported brewery file to AI clients — read tools, plus write tools behind the client's approval prompt.</p>
+            <div class="inner"><div class="il">operates on</div><div class="iv mono">brewery.json (file)</div></div>
+            <div class="tags"><span class="tag">npm run mcp</span><span class="tag">applyAction</span></div>
+          </div>
+
+          <div class="conduit dashed">
+            <div class="txt">file re-import<small>not live</small></div>
+            <div class="line"></div>
+            <div class="cap l" aria-hidden="true"></div>
+          </div>
+
+          <div class="node machine">
+            <div class="kicker"><span class="dot"></span><span class="role">static Next.js · client-only</span></div>
+            <h3>Browser PWA</h3>
+            <p>The whole app. All views (recipes, brew flow, logbook, calculators) are client components; no server runtime exists in the web app.</p>
+            <div class="inner"><div class="il">source of truth</div><div class="iv mono">Dexie · IndexedDB</div></div>
+            <div class="tags"><span class="tag">liveQuery</span><span class="tag">repos + Zod</span><span class="tag">service worker</span></div>
+          </div>
+
+          <div class="conduit">
+            <div class="txt">two-way sync<small>pull · merge · push</small></div>
+            <div class="line flow"></div>
+            <div class="cap r" aria-hidden="true"></div>
+            <div class="cap l" aria-hidden="true"></div>
+          </div>
+
+          <div class="node machine">
+            <div class="kicker"><span class="dot"></span><span class="role">Node http · self-hosted</span></div>
+            <h3>Sync Daemon</h3>
+            <p>Optional always-on tier. Holds canonical state, serves the app's sync calls, and is the only surface that can <em>receive</em> a sensor push.</p>
+            <div class="inner"><div class="il">canonical store</div><div class="iv mono">brewery.json + .bak</div></div>
+            <div class="tags"><span class="tag">GET/PUT /state</span><span class="tag">POST /readings</span><span class="tag">Bearer + ETag</span></div>
+          </div>
+        </div>
+
+        <!-- ties to spine -->
+        <div class="spine-ties" aria-hidden="true">
+          <div class="v"><span></span><span class="lbl">read / write</span></div>
+          <div class="v"><span></span><span class="lbl">read / write</span></div>
+          <div class="v"><span></span><span class="lbl">read / write</span></div>
+        </div>
+
+        <!-- the shared data spine -->
+        <div class="spine">
+          <div class="st">
+            <h3 class="display">DumpV10</h3><span class="v mono">the shared envelope</span>
+            <span class="m mono">one shape · backup = sync = MCP</span>
+          </div>
+          <p>Every runtime serializes to and validates against this one versioned envelope — the backup format, the sync wire payload, and the MCP file are literally the same thing.</p>
+          <div class="tables">
+            <span>recipes</span><span>batches</span><span>readings</span><span>inventory</span><span>stockTransactions</span><span>waterProfiles</span><span>yeastLots</span><span>equipmentProfiles</span><span>gearItems</span><span>settings</span><span>deviceLinks</span><span>rowTombstones</span><span>appMeta</span><span>…16 tables</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="legend" role="list" aria-label="Diagram legend">
+        <span class="leg" role="listitem"><span class="sw cy"></span> the machine — runtimes, transports, chrome</span>
+        <span class="leg" role="listitem"><span class="sw wo"></span> the wort — brew data &amp; the shared envelope</span>
+        <span class="leg" role="listitem"><span class="sw dash"></span> file-based / one-shot (needs re-import)</span>
+        <span class="leg" role="listitem"><span class="sw hop"></span> accepted</span>
+        <span class="leg" role="listitem"><span class="sw em"></span> deleted / conflict</span>
+      </div>
+    </section>
+
+    <!-- ===================== 2 · LIFECYCLE ===================== -->
+    <section aria-labelledby="s2">
+      <div class="sec-head">
+        <span class="n mono">02</span>
+        <h2 id="s2" class="display">A Brew, End to End</h2>
+        <span class="eyebrow wort">the core journey</span>
+      </div>
+      <p class="sec-sub">The path a batch takes through the app — every step writes through a repo into IndexedDB and re-renders live via <span class="mono">liveQuery</span>.</p>
+
+      <div class="flowrow">
+        <div class="step" tabindex="0"><span class="num mono">01 · RECIPE</span><h3>Build or import</h3><p>Recipe editor with live OG/FG/ABV/IBU/SRM, or import BeerXML / Brewfather (dry-run, never duplicates).</p><span class="repo mono">recipeRepo.save</span></div>
+        <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h14M13 6l6 6-6 6"/></svg></div>
+        <div class="step" tabindex="0"><span class="num mono">02 · BREW FLOW</span><h3>Guided brew day</h3><p>Mints a batch, deducts yeast, walks mash → boil → additions with step timers, wake-lock &amp; alarms.</p><span class="repo mono">sessionToBatch → batchRepo</span></div>
+        <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h14M13 6l6 6-6 6"/></svg></div>
+        <div class="step" tabindex="0"><span class="num mono">03 · READINGS</span><h3>Log fermentation</h3><p>Gravity &amp; temperature by hand — or automatically from a linked sensor (see §03).</p><span class="repo mono">readingsRepo.create</span></div>
+        <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h14M13 6l6 6-6 6"/></svg></div>
+        <div class="step" tabindex="0"><span class="num mono">04 · CHART</span><h3>Watch it ferment</h3><p>Dual-axis chart — <span class="mono" style="color:var(--wort)">amber</span> gravity curve, <span class="mono" style="color:var(--cyan)">cyan</span> temperature — live from the readings.</p><span class="repo mono">use-batch-readings</span></div>
+        <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h14M13 6l6 6-6 6"/></svg></div>
+        <div class="step" tabindex="0"><span class="num mono">05 · COMPLETE</span><h3>Close the batch</h3><p>Status transition → logbook. Then inventory draw-down, yeast-harvest lineage, tasting notes, XLSX report.</p><span class="repo mono">completeBrew → batchRepo</span></div>
+      </div>
+    </section>
+
+    <!-- ===================== 3 · SENSOR INGESTION ===================== -->
+    <section aria-labelledby="s3">
+      <div class="sec-head">
+        <span class="n mono">03</span>
+        <h2 id="s3" class="display">Automatic Sensor Readings</h2>
+        <span class="eyebrow">self-hosted tier · the honest reason it exists</span>
+      </div>
+      <p class="sec-sub">A static PWA has nowhere to receive an inbound push — an always-on daemon does. That asymmetry is the whole reason a self-hosted tier exists. A floating hydrometer's readings reach the batch sheet with no typing.</p>
+
+      <div class="ingest panel" style="padding:clamp(16px,2.6vw,24px)">
+        <div class="pipe">
+          <div class="stage">
+            <div class="bead" aria-hidden="true"><span class="b data"></span><span class="ln"></span></div>
+            <div class="body">
+              <div class="lead"><h3>Device or bridge posts a reading</h3><span class="ep">POST /readings</span></div>
+              <p>Tilt (via TiltBridge/Tilt Pi), iSpindel, RAPT (via script), or the generic shape — with a Bearer token, ideally <em>ingest-scoped</em> so a compromised bridge can't read or overwrite your whole brewery.</p>
+            </div>
+          </div>
+          <div class="stage">
+            <div class="bead" aria-hidden="true"><span class="b"></span><span class="ln"></span></div>
+            <div class="body">
+              <div class="lead"><h3>Daemon detects, normalizes &amp; guards</h3></div>
+              <p>Auto-detects the device shape, converts units to SG / °C, then refuses anything implausible rather than poisoning the chart. Per-device rate limit before the write.</p>
+              <div class="guards">
+                <span class="guard">SG 0.9–1.2</span><span class="guard">temp −10–110 °C</span><span class="guard">pH (0,14]</span><span class="guard">≤256 KB body</span><span class="guard">≥60 s / device</span>
+              </div>
+            </div>
+          </div>
+          <div class="stage">
+            <div class="bead" aria-hidden="true"><span class="b data"></span><span class="ln"></span></div>
+            <div class="body">
+              <div class="lead"><h3>Resolve the device key against your links</h3></div>
+              <p>The normalized key (e.g. <span class="mono" style="color:var(--wort)">tilt:RED</span>) is matched to a batch you linked in <em>Settings → Sensor devices</em>. Three outcomes:</p>
+              <div class="outcomes">
+                <div class="outcome ok"><div class="code">200 linked</div><div class="st">appended</div><p>Content-addressed reading appended to the batch. Reaches every device on the next sync pull.</p></div>
+                <div class="outcome hold"><div class="code">202 unlinked</div><div class="st">nothing stored</div><p>Key isn't linked yet — the response tells you exactly which key to link, then <span class="mono">Sync now</span>.</p></div>
+                <div class="outcome bad"><div class="code">202 batch-missing</div><div class="st">nothing stored</div><p>Linked batch was deleted. No orphan pool by design — re-link to a live batch.</p></div>
+              </div>
+            </div>
+          </div>
+          <div class="stage">
+            <div class="bead" aria-hidden="true"><span class="b data"></span></div>
+            <div class="body">
+              <div class="lead"><h3>It appears on the batch sheet</h3></div>
+              <p>Next <span class="mono">Sync now</span> pulls the reading into IndexedDB; <span class="mono">use-batch-readings</span> re-emits and it lands on the chart with a colored <em>source badge</em> so you can tell it from a hand-typed point.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 4 · INTERNALS ===================== -->
+    <section aria-labelledby="s4">
+      <div class="sec-head">
+        <span class="n mono">04</span>
+        <h2 id="s4" class="display">Data &amp; Sync Internals</h2>
+        <span class="eyebrow wort">what keeps it consistent</span>
+      </div>
+      <p class="sec-sub">Single-user, multi-device — reconciled deterministically, no bespoke protocol. The sync wire payload <em>is</em> the backup envelope.</p>
+
+      <div class="grid-cards">
+        <div class="card"><div class="h w"><span class="i"></span><h3>Source of truth</h3></div><p>Browser <code>Dexie / IndexedDB</code> (v12 schema, additive migrations). Screens subscribe via <code>liveQuery</code> — no fetch, no server.</p></div>
+        <div class="card"><div class="h"><span class="i"></span><h3>Repository layer</h3></div><p>Every read <em>and</em> write boundary is <code>Zod</code>-parsed. Reactivity + validation live in <code>src/lib/db/repos/*</code>, not the UI.</p></div>
+        <div class="card"><div class="h em" style="--c:var(--ember)"><span class="i" style="background:var(--ember)"></span><h3>Deletes → tombstones</h3></div><p>A delete writes a <code>rowTombstone</code> in the <em>same</em> transaction (cascades to children). LWW by <code>deletedAt</code>; GC after 180 days — so a delete survives a merge instead of resurrecting.</p></div>
+        <div class="card"><div class="h"><span class="i"></span><h3>Sync = pull · merge · push</h3></div><p>Pull canonical, dump local, merge (LWW state + union ledger), restore, push. Deletes suppressed by tombstones; readings die with their batch.</p></div>
+        <div class="card"><div class="h"><span class="i"></span><h3>Optimistic concurrency</h3></div><p><code>ETag</code> / <code>If-Match</code> on <code>PUT /state</code>. A <code>412</code> triggers re-pull → re-merge → retry (×3) — a lost update is structurally impossible.</p></div>
+        <div class="card"><div class="h"><span class="i"></span><h3>Three sync modes</h3></div><p><code>two-way</code> (default), <code>pull-only</code> ("phone follows server"), <code>push-only</code> ("this desktop is canonical" — but grafts daemon-ingested readings so sensor data isn't destroyed).</p></div>
+        <div class="card"><div class="h em"><span class="i" style="background:var(--ember)"></span><h3>Secrets never travel</h3></div><p>Sync URL + token live in the <code>appMeta</code> table on the device only — never in a backup, never inside the synced payload.</p></div>
+        <div class="card"><div class="h w"><span class="i"></span><h3>BYO-AI companion</h3></div><p>Same tool engine (<code>src/lib/ai</code>) runs in-app with your own API key — stored in your browser, sent only to the provider you chose.</p></div>
+        <div class="card"><div class="h"><span class="i"></span><h3>Build &amp; deploy</h3></div><p>Static <code>out/</code> → GitHub Pages (front-end demo), Netlify, or self-host behind Caddy + a systemd daemon. Postbuild injects a hashed CSP + SW precache.</p></div>
+      </div>
+    </section>
+
+    <!-- ===================== 5 · CAVEATS ===================== -->
+    <section aria-labelledby="s5">
+      <div class="sec-head">
+        <span class="n mono">05</span>
+        <h2 id="s5" class="display">Honest Edges</h2>
+        <span class="eyebrow">documented limits, not bugs</span>
+      </div>
+      <div class="caveats">
+        <div class="caveat info"><h3>MCP writes are file-based</h3><p>The AI edits an exported <code style="font-family:'GeistMono',monospace">brewery.json</code>, not the live database. You must <strong>re-import</strong> it in the app to see the changes — the dashed edge in §01.</p></div>
+        <div class="caveat"><h3>Device-link lag</h3><p>A sensor link saved in Settings only reaches the daemon on the next <em>push</em>. Until that sync lands, ingestion keeps answering <code style="font-family:'GeistMono',monospace">202 unlinked</code>.</p></div>
+        <div class="caveat info"><h3>Two version axes</h3><p>Dexie <em>schema</em> version (12) ≠ <em>dump</em> envelope version (10). Different axes — don't conflate them. <code style="font-family:'GeistMono',monospace">checkSyncHealth</code> guards the dump one.</p></div>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <span class="mono">Zero-Day Brewery · Beer-Lab-Ware · MIT</span>
+      <span>Map of the shipped architecture — <a href="https://github.com/zero-day-brewery/beer-lab-ware">github.com/zero-day-brewery/beer-lab-ware</a></span>
+    </footer>
+
+  </div>
+</div>
+
+</body>
+</html>
