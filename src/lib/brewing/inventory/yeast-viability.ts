@@ -51,9 +51,26 @@ export function currentViability(lot: YeastLot, now: Date = new Date()): number 
 }
 
 /**
- * Estimated live cells remaining in a lot, in billions:
- * `initialCells_B × currentViability%`.
+ * Estimated live cells remaining in a lot, in billions.
+ *
+ * If the lot carries a direct count (`measuredViableCells_B` + `measuredAt`) it
+ * OVERRIDES the estimate: the measurement re-anchors the LEVEL, then decays
+ * forward at the lot's OWN absolute decline rate — `initialCells_B ×
+ * lossPctPerDay/100` B/day, the slope of the default curve. This is the
+ * conservative choice: a measurement that lands exactly on the age model
+ * reproduces the age estimate at every later date (it never resets the decay
+ * clock to extend the lot's lifespan, which would overstate cells and risk an
+ * under-pitch). A future `measuredAt` (now < measuredAt) contributes no growth.
+ *
+ * Otherwise the age-based estimate `initialCells_B × currentViability%` is used
+ * (unchanged from before measurement support existed).
  */
 export function viableCells(lot: YeastLot, now: Date = new Date()): number {
+  if (lot.measuredViableCells_B != null && lot.measuredAt != null) {
+    const { lossPctPerDay } = DECLINE_BY_FORM[lot.form]
+    const absLossPerDay = lot.initialCells_B * (lossPctPerDay / 100)
+    const daysSince = Math.max(0, (now.getTime() - new Date(lot.measuredAt).getTime()) / MS_PER_DAY)
+    return Math.max(0, lot.measuredViableCells_B - absLossPerDay * daysSince)
+  }
   return lot.initialCells_B * (currentViability(lot, now) / 100)
 }

@@ -19,6 +19,18 @@ function fmtQty(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(2)
 }
 
+/** A Date as a LOCAL `YYYY-MM-DD` (for a `<input type="date">` value) — avoids
+ *  the UTC roll-over `toISOString().slice(0,10)` causes in the evening. */
+function localYMD(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/** Local midnight of a Date, in ms — for whole-calendar-day differences. */
+function localDayStart(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+}
+
 /**
  * Direct-child count per lot id, across the whole family (tree + orphans —
  * `buildLineage` guarantees every lot lands in one or the other, so walking
@@ -201,9 +213,18 @@ function LineageNodeCard({
   const [qtyDraft, setQtyDraft] = useState(() => String(lot.quantity))
   const [harvesting, setHarvesting] = useState(false)
   const [parentDraft, setParentDraft] = useState('') // '' = make root
+  const [measuring, setMeasuring] = useState(false)
+  const [cellsDraft, setCellsDraft] = useState('')
+  const [measuredAtDraft, setMeasuredAtDraft] = useState(() => localYMD(now))
 
   const pct = currentViability(lot, now)
   const cells = viableCells(lot, now)
+  const measured = lot.measuredViableCells_B != null && lot.measuredAt != null
+  const measuredDaysAgo = measured
+    ? Math.round(
+        (localDayStart(now) - localDayStart(new Date(lot.measuredAt as string))) / 86_400_000,
+      )
+    : 0
   const spent = lot.quantity === 0
   const drift = lot.generation >= GENERATION_WARN_AT
   const belowFloor = pct < VIABILITY_FLOOR_PCT
@@ -260,6 +281,41 @@ function LineageNodeCard({
     }
   }
 
+  // Record a direct viable-cell count (already viability-discounted, e.g. a
+  // hemocytometer reading). Overrides the age estimate in viableCells(),
+  // decaying forward from measuredAt. "Latest only" — overwrites any prior.
+  const saveMeasurement = async () => {
+    const n = Number(cellsDraft)
+    if (!Number.isFinite(n) || n <= 0) {
+      toast.error('Enter a cell count > 0 (billions)')
+      return
+    }
+    // Parse the date-input value as LOCAL midnight, not UTC (new Date('YYYY-MM-DD')
+    // is UTC and would shift the day for anyone behind UTC).
+    const at = new Date(`${measuredAtDraft}T00:00:00`)
+    if (Number.isNaN(at.getTime())) {
+      toast.error('Enter a valid measurement date')
+      return
+    }
+    try {
+      await yeastLotsRepo.save({ ...lot, measuredViableCells_B: n, measuredAt: at.toISOString() })
+      toast.success(`Measured "${lot.name}" at ${n} B`)
+      setMeasuring(false)
+    } catch (err) {
+      toast.error(`Save failed: ${(err as Error).message}`)
+    }
+  }
+
+  // Revert to the age-based estimate by dropping the direct count.
+  const clearMeasurement = async () => {
+    try {
+      await yeastLotsRepo.save({ ...lot, measuredViableCells_B: undefined, measuredAt: undefined })
+      toast.success(`Reverted "${lot.name}" to the age estimate`)
+    } catch (err) {
+      toast.error(`Clear failed: ${(err as Error).message}`)
+    }
+  }
+
   return (
     <div
       data-testid="lineage-node"
@@ -297,7 +353,21 @@ function LineageNodeCard({
         </div>
         <div className="readout">
           <span className="pct">~{pct.toFixed(0)}% est.</span>
-          <span>~{cells.toFixed(1)} B</span>
+          <span>
+            {measured ? '' : '~'}
+            {cells.toFixed(1)} B
+          </span>
+          {measured && (
+            <span
+              className="mini-alert go"
+              data-testid="measured-badge"
+              title={`Direct count on ${new Date(
+                lot.measuredAt as string,
+              ).toLocaleDateString()} overrides the age estimate; decays forward from there`}
+            >
+              measured {measuredDaysAgo <= 0 ? 'today' : `${measuredDaysAgo}d ago`}
+            </span>
+          )}
         </div>
       </div>
 
@@ -340,6 +410,14 @@ function LineageNodeCard({
                 Harvest from this lot
               </button>
             )}
+            <button type="button" onClick={() => setMeasuring(true)} className="btn-ghost">
+              Measure cells
+            </button>
+            {measured && (
+              <button type="button" onClick={clearMeasurement} className="btn-ghost">
+                Clear measurement
+              </button>
+            )}
             <button type="button" onClick={onDelete} className="btn-ghost danger">
               Delete
             </button>
@@ -367,6 +445,46 @@ function LineageNodeCard({
           </label>
           <button type="button" onClick={reassignParent} className="btn-ghost">
             Reassign
+          </button>
+        </div>
+      )}
+
+      {measuring && (
+        <div className="flex flex-wrap items-center gap-1 text-xs" data-testid="measure-row">
+          <label className="flex items-center gap-1">
+            <span>Viable cells (B)</span>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              value={cellsDraft}
+              onChange={(e) => setCellsDraft(e.target.value)}
+              aria-label={`Measured viable cells (billions) for ${lot.name}`}
+              className="field w-20"
+            />
+          </label>
+          <label className="flex items-center gap-1">
+            <span>on</span>
+            <input
+              type="date"
+              value={measuredAtDraft}
+              onChange={(e) => setMeasuredAtDraft(e.target.value)}
+              aria-label={`Measurement date for ${lot.name}`}
+              className="field"
+            />
+          </label>
+          <button type="button" onClick={saveMeasurement} className="btn-ghost">
+            Save measurement
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMeasuring(false)
+              setCellsDraft('')
+            }}
+            className="btn-ghost"
+          >
+            Cancel
           </button>
         </div>
       )}

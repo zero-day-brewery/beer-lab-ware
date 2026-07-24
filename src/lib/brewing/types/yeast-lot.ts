@@ -43,6 +43,16 @@ export const YeastLotSchema = z.object({
   productionDate: z.string().datetime(),
   /** Live cells at production, in billions (package rating, or estimate for slurry). */
   initialCells_B: z.number().positive(),
+  /**
+   * A direct viable-cell count (billions), already viability-discounted — e.g. a
+   * hemocytometer reading. When present with `measuredAt`, it OVERRIDES the crude
+   * age-based estimate in `viableCells()`, decaying forward from `measuredAt` at
+   * the form's slope. "Latest only": a new measurement overwrites the prior one.
+   * The age-based `currentViability()` % bar deliberately stays estimate-based.
+   */
+  measuredViableCells_B: z.number().positive().optional(),
+  /** When `measuredViableCells_B` was counted (ISO). Re-anchors the decay curve. */
+  measuredAt: z.string().datetime().optional(),
   /** 0 = fresh pitch; N = Nth repitch of harvested slurry. Optional realism (v2 uses it more). */
   generation: z.number().int().nonnegative().default(0),
   /** On-hand quantity (count of packs/vials, or mL/g of slurry). */
