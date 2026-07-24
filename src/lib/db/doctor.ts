@@ -12,6 +12,7 @@ import { SettingsSchema } from '@/lib/brewing/types/settings'
 import { StockTransactionSchema } from '@/lib/brewing/types/stock-transaction'
 import { BrewTimerSchema } from '@/lib/brewing/types/timer'
 import { YeastLotSchema } from '@/lib/brewing/types/yeast-lot'
+import { resolveBoardConflicts } from '@/lib/db/board-conflicts'
 import { type BrewDB, db } from '@/lib/db/schema'
 import { tsOf } from '@/lib/sync/merge'
 
@@ -272,8 +273,43 @@ export async function runDataDoctor(
     ),
   )
 
+  // C10 — at most one in-progress batch per fermenter vessel (the duplicate-batch
+  // invariant; see db/board-conflicts.ts + backup.restore() + the sync merge).
+  // Reuse the SAME resolver those paths use, so detection and autofix agree with
+  // them on which batch survives. failingIds = the losers that would be archived.
+  const c10Fail = resolveBoardConflicts(batches, new Date().toISOString()).demoted.map((d) => d.id)
+  checks.push(
+    check(
+      {
+        id: 'C10',
+        label: 'One in-progress batch per fermenter',
+        severity: 'error',
+        count: 0,
+        message:
+          'Two or more in-progress batches share a fermenter vessel. Fix keeps the later-minted one in progress and archives the rest — nothing is deleted; archived batches stay in the logbook.',
+        canAutoFix: true,
+      },
+      c10Fail,
+    ),
+  )
+
   const failed = checks.filter((c) => !c.ok).length
   return { checks, passed: checks.length - failed, failed }
+}
+
+/** Archive all but the deterministic winner of each fermenter vessel that has
+ *  MORE than one in-progress batch (see resolveBoardConflicts). Never deletes —
+ *  the loser is archived and stays in the logbook. One rw txn. Returns the count
+ *  archived. Reuses the shared resolver so it agrees with restore()/sync. */
+export async function autoFixBoardConflicts(database: BrewDB = db): Promise<number> {
+  return database.transaction('rw', database.batches, async () => {
+    const batches = await database.batches.toArray()
+    const { rows, demoted } = resolveBoardConflicts(batches, new Date().toISOString())
+    if (demoted.length === 0) return 0
+    const demotedIds = new Set(demoted.map((d) => d.id))
+    await database.batches.bulkPut(rows.filter((r) => demotedIds.has(r.id)))
+    return demoted.length
+  })
 }
 
 /** Recompute InventoryItem.amount = Σ deltas. Appends NO stockTransaction (the
