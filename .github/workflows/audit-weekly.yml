@@ -1,0 +1,27 @@
+name: Weekly audit
+
+# Standing guard against a "latently red main": the CI audit only runs on
+# push/PR, so a newly-published advisory against an already-installed prod
+# dependency goes unnoticed until some unrelated PR happens to trip it. This
+# re-runs the same prod-only, high-severity gate on a schedule, so a fresh
+# advisory surfaces as a failed run (and its notification) on its own.
+on:
+  schedule:
+    - cron: '17 15 * * 1' # Mondays 15:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
