@@ -73,6 +73,7 @@
 import { v5 as uuidv5 } from 'uuid'
 import type { StockTransaction } from '@/lib/brewing/types/stock-transaction'
 import type { DumpV10 } from '@/lib/db/backup'
+import { resolveBoardConflicts } from '@/lib/db/board-conflicts'
 import { mergeLedger, mergeState, mergeTombstones, type RowTombstone } from '@/lib/sync/merge'
 import type { SyncPayload, SyncPushResult, SyncTransport } from '@/lib/sync/transport'
 
@@ -347,6 +348,16 @@ export function mergeDumpTables(
       (r) => !batchTombstones.has(r.batchId) || survivingBatchIds.has(r.batchId),
     )
   }
+
+  // Board-conflict resolution: two devices can each mint an in-progress batch on
+  // the SAME fermenter vessel offline; the union above keeps both. Archive all
+  // but the deterministic winner so ≤1 in-progress batch per vessel survives
+  // fleet-wide. The resolver ranks on IMMUTABLE fields (batchNo, id), so both
+  // devices compute the same winner regardless of where their mutable/LWW fields
+  // are in the convergence cycle. Idempotent — a no-conflict input is unchanged.
+  // (backup.restore() also runs this, so local Dexie is safe even against an old
+  // bundle; doing it here makes the PUSHED dump clean in one cycle, not two.)
+  out.batches = resolveBoardConflicts(out.batches ?? [], now).rows
 
   // Supersede: a tombstone whose row survived in the merged OUTPUT can only
   // have survived because its timestamp beat `deletedAt` (mergeState/

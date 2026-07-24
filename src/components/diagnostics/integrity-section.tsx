@@ -1,6 +1,11 @@
 'use client'
 import { useState } from 'react'
-import { autoFixLedger, type DoctorReport, runDataDoctor } from '@/lib/db/doctor'
+import {
+  autoFixBoardConflicts,
+  autoFixLedger,
+  type DoctorReport,
+  runDataDoctor,
+} from '@/lib/db/doctor'
 import { reportDbError } from '@/lib/diagnostics/error-log'
 
 export function IntegritySection() {
@@ -18,12 +23,14 @@ export function IntegritySection() {
     }
   }
 
-  // Only C1 exposes an auto-fix today (autoFixLedger recomputes amount = Σ deltas,
-  // appends no txn). Re-run the doctor afterwards so the checklist reflects the fix.
-  const fix = async () => {
+  // Dispatch to the RIGHT fix per check id — a single shared handler previously
+  // always ran autoFixLedger regardless of which check's Fix button was clicked.
+  // Re-run the doctor afterwards so the checklist reflects the fix.
+  const fix = async (checkId: string) => {
     setRunning(true)
     try {
-      await autoFixLedger()
+      if (checkId === 'C1') await autoFixLedger()
+      else if (checkId === 'C10') await autoFixBoardConflicts()
       setReport(await runDataDoctor())
     } catch (e) {
       reportDbError('doctor-fix', e)
@@ -84,7 +91,7 @@ export function IntegritySection() {
                       <button
                         type="button"
                         className="btn-ghost mt-2"
-                        onClick={() => void fix()}
+                        onClick={() => void fix(c.id)}
                         disabled={running}
                       >
                         Fix
