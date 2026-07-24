@@ -93,16 +93,32 @@ export function DbRecoveryPanel({ result }: { result: DbFailure }) {
         </>
       )}
 
-      {(result.status === 'blocked' || result.status === 'unknown') && (
+      {result.status === 'blocked' && (
         <>
           <p className="text-sm opacity-80">
-            {result.status === 'blocked'
-              ? 'Another tab is upgrading the database. Close it, then reload.'
-              : 'Something unexpected happened opening the database. Reload to try again.'}
+            Another tab is upgrading the database. Close it, then reload.
           </p>
           <button type="button" onClick={reload} className="btn-primary self-start">
             Reload
           </button>
+        </>
+      )}
+
+      {result.status === 'unknown' && (
+        <>
+          <p className="text-sm opacity-80">
+            Something unexpected happened opening the database. Try reloading first — and export a
+            rescue copy so your brewery data is safe either way.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={reload} className="btn-primary">
+              Reload
+            </button>
+            <button type="button" onClick={exportSalvage} className="btn-ghost">
+              Export what we can
+            </button>
+            <CopyDiagnosticsButton />
+          </div>
         </>
       )}
     </section>

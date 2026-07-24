@@ -82,16 +82,100 @@ export async function openDb(
   }
 }
 
-export async function salvageDump(database: BrewDB = db): Promise<Blob> {
+export interface SalvageResult {
+  salvagedAt: string
+  tables: Record<string, unknown[]>
+  /** Object stores that could not be read — NEVER silently rendered as `[]`. */
+  failed: string[]
+}
+
+/**
+ * Last-resort, READ-ONLY salvage that bypasses Dexie entirely.
+ *
+ * The old implementation iterated `database.tables` — the schema THIS build
+ * declares — and `catch { [] }`'d any read error. Two ways that destroyed data
+ * on the recovery path (the panel offers this export, then a permanent
+ * `resetDb`):
+ *   1. A store the running build doesn't declare (a newer on-disk schema, whose
+ *      data is fully intact) was never iterated, so it vanished from the export.
+ *   2. `table.toArray()` auto-OPENS the Dexie database — against a DB written by
+ *      a different build, Dexie "extends" it and bumps the native version,
+ *      mutating the very database we're trying to rescue.
+ *
+ * Instead: open by name with NO version (so IndexedDB opens whatever is on disk
+ * and never runs an upgrade), enumerate the object stores that ACTUALLY exist,
+ * and `getAll()` each in one read-only transaction. Unreadable stores are listed
+ * in `failed` rather than masked as empty.
+ */
+export function salvageRaw(name: string): Promise<SalvageResult> {
+  const salvagedAt = new Date().toISOString()
   const tables: Record<string, unknown[]> = {}
-  for (const table of database.tables) {
-    try {
-      tables[table.name] = await table.toArray() // raw — SKIP Zod
-    } catch {
-      tables[table.name] = []
-    }
+  const failed: string[] = []
+
+  if (typeof indexedDB === 'undefined') {
+    return Promise.resolve({ salvagedAt, tables, failed: ['<indexedDB unavailable>'] })
   }
-  const body = JSON.stringify({ salvagedAt: new Date().toISOString(), tables }, null, 2)
+
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (idb?: IDBDatabase): void => {
+      if (settled) return
+      settled = true
+      idb?.close()
+      resolve({ salvagedAt, tables, failed })
+    }
+
+    const req = indexedDB.open(name) // NO version → read on disk as-is, never upgrade
+    req.onerror = () => {
+      failed.push('<database open failed>')
+      finish()
+    }
+    req.onblocked = () => {
+      failed.push('<database open blocked>')
+      finish()
+    }
+    req.onsuccess = () => {
+      const idb = req.result
+      const storeNames = Array.from(idb.objectStoreNames)
+      if (storeNames.length === 0) return finish(idb)
+
+      let tx: IDBTransaction
+      try {
+        tx = idb.transaction(storeNames, 'readonly')
+      } catch {
+        failed.push(...storeNames)
+        return finish(idb)
+      }
+
+      let remaining = storeNames.length
+      const done = (): void => {
+        if (--remaining === 0) finish(idb)
+      }
+      for (const store of storeNames) {
+        let getAll: IDBRequest<unknown[]>
+        try {
+          getAll = tx.objectStore(store).getAll()
+        } catch {
+          failed.push(store)
+          done()
+          continue
+        }
+        getAll.onsuccess = () => {
+          tables[store] = getAll.result
+          done()
+        }
+        getAll.onerror = () => {
+          failed.push(store)
+          done()
+        }
+      }
+    }
+  })
+}
+
+export async function salvageDump(database: BrewDB = db): Promise<Blob> {
+  const result = await salvageRaw(database.name)
+  const body = JSON.stringify(result, null, 2)
   return new Blob([body], { type: 'application/json' })
 }
 
