@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BrewSession } from '@/lib/brewing/process/session'
 import { sessionRepo } from '@/lib/db/repos/session'
@@ -80,12 +80,17 @@ describe('SystemView — loadActive on mount', () => {
 
     render(<SystemView />)
 
-    // The guard clears the stale pointer, so the idle CTA renders instead.
+    // The stale-pointer clear runs in the mount effect. The idle CTA is ALSO the
+    // initial (session === null) render, so awaiting it is not a reliable signal
+    // that the clear has completed — wait on the pointer itself first (this is the
+    // CI-only race that flaked here).
+    await waitFor(() => {
+      expect(useSessionStore.getState().activeId).toBeNull()
+      expect(persistedActiveId()).toBeNull() // dead id no longer lingers in localStorage
+    })
+    expect(useSessionStore.getState().session).toBeNull()
     expect(await screen.findByRole('button', { name: /Start a brew/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Return to runner/i })).not.toBeInTheDocument()
-    expect(useSessionStore.getState().session).toBeNull()
-    expect(useSessionStore.getState().activeId).toBeNull()
-    expect(persistedActiveId()).toBeNull() // dead id no longer lingers in localStorage
   })
 
   it('a stale ABORTED pointer is cleared on mount', async () => {
@@ -94,9 +99,11 @@ describe('SystemView — loadActive on mount', () => {
 
     render(<SystemView />)
 
-    expect(await screen.findByRole('button', { name: /Start a brew/i })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(useSessionStore.getState().activeId).toBeNull()
+      expect(persistedActiveId()).toBeNull()
+    })
     expect(useSessionStore.getState().session).toBeNull()
-    expect(useSessionStore.getState().activeId).toBeNull()
-    expect(persistedActiveId()).toBeNull()
+    expect(await screen.findByRole('button', { name: /Start a brew/i })).toBeInTheDocument()
   })
 })
