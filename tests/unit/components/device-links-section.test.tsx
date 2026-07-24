@@ -127,7 +127,10 @@ describe('DeviceLinksSection (Settings → Sensor devices)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Unlink tilt:RED' }))
 
     await waitFor(async () => expect(await deviceLinksRepo.list()).toHaveLength(0))
-    expect(screen.getByText('No devices linked yet.')).toBeInTheDocument()
+    // findBy, not getBy: the repo write above completes a tick before the
+    // liveQuery-driven re-render flushes — a sync getByText races that re-render
+    // and flakes under load. Wait for the empty-state text to actually render.
+    expect(await screen.findByText('No devices linked yet.')).toBeInTheDocument()
   })
 
   it('a link whose batch was deleted still renders (shown as "deleted batch"), never crashes', async () => {
