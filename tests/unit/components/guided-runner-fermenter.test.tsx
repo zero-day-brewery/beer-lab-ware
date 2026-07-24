@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Proves the guided runner sources the target vessel from session.fermenterId at all
-// four call sites (batch create, re-map, enter-effects, complete-effects) and rehydrates
-// the batch BY BOARD (getByBoard), with a 'f1' fallback for legacy sessions.
+// four call sites (batch create, re-map, enter-effects, complete-effects) and resolves
+// the batch BY BOARD (getOrCreateForBoard), with a 'f1' fallback for legacy sessions.
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -29,6 +29,14 @@ const h = vi.hoisted(() => {
     getByBoard: vi.fn().mockResolvedValue(null),
     getActive: vi.fn().mockResolvedValue(null),
     nextBatchNo: vi.fn().mockResolvedValue(1),
+    // The runner mints through the ATOMIC getOrCreateForBoard (re-check +
+    // batchNo + put in one transaction). This double stays faithful to the real
+    // one: it invokes the SYNCHRONOUS `make` factory — which is what still puts
+    // sessionToBatch on the call path — and reports whether it minted.
+    getOrCreateForBoard: vi.fn(async (_boardId: string, make: (n: number) => unknown) => ({
+      batch: make(1),
+      created: true,
+    })),
     sessionToBatch: vi.fn((a: { fermenterId?: string; id: string }) => ({
       id: a.id,
       batchNo: 1,
@@ -69,6 +77,8 @@ vi.mock('@/lib/db/repos/batch', () => ({
     getByBoard: (id: string) => h.getByBoard(id),
     getActive: () => h.getActive(),
     nextBatchNo: () => h.nextBatchNo(),
+    getOrCreateForBoard: (id: string, make: (n: number) => unknown) =>
+      h.getOrCreateForBoard(id, make),
   },
 }))
 
@@ -160,13 +170,19 @@ import { GuidedRunner } from '@/components/system/run/guided-runner'
 afterEach(() => {
   vi.clearAllMocks()
   h.getByBoard.mockResolvedValue(null)
+  h.getOrCreateForBoard.mockImplementation(async (_boardId, make) => ({
+    batch: make(1),
+    created: true,
+  }))
   h.session.fermenterId = 'seed-b'
 })
 
 describe('GuidedRunner — fermenter sourcing', () => {
-  it('rehydrates BY BOARD using the session fermenterId', async () => {
+  it('rehydrates-or-mints BY BOARD using the session fermenterId', async () => {
     render(<GuidedRunner />)
-    await vi.waitFor(() => expect(h.getByBoard).toHaveBeenCalledWith('seed-b'))
+    await vi.waitFor(() =>
+      expect(h.getOrCreateForBoard).toHaveBeenCalledWith('seed-b', expect.any(Function)),
+    )
   })
 
   it('creates the batch with the session fermenterId (sessionToBatch fermenterId)', async () => {
@@ -198,11 +214,11 @@ describe('GuidedRunner — fermenter sourcing', () => {
   it('falls back to TARGET_FERMENTER_ID ("f1") when the session has no fermenterId (legacy)', async () => {
     h.session.fermenterId = undefined
     render(<GuidedRunner />)
-    // sessionToBatch runs two awaits after getByBoard, so wait on it directly.
+    // sessionToBatch now runs inside the mint factory, so wait on it directly.
     await vi.waitFor(() =>
       expect(h.sessionToBatch).toHaveBeenCalledWith(expect.objectContaining({ fermenterId: 'f1' })),
     )
-    expect(h.getByBoard).toHaveBeenCalledWith('f1')
+    expect(h.getOrCreateForBoard).toHaveBeenCalledWith('f1', expect.any(Function))
     expect(h.applyEffects.mock.calls[0][2]).toBe('f1')
   })
 })

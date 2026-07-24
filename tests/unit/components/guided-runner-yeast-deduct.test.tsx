@@ -3,8 +3,10 @@
 // (packet/vial) yeast lot exactly once per batch, and ONLY on the "new batch
 // minted" path — never on the "existing batch rehydrated" path, regardless of
 // the batch's `yeastDeducted` marker. Single-branch placement is what closes
-// the TOCTOU double-deduct race (two mounts racing a shared board via
-// `getByBoard`): a rehydrate never deducts, so there's nothing to race.
+// the TOCTOU double-deduct race (two mounts racing a shared board): a rehydrate
+// never deducts, so there's nothing to race. The mint/rehydrate distinction now
+// comes from `created`, reported from INSIDE getOrCreateForBoard's transaction,
+// which is what makes it trustworthy under a concurrent mount.
 // Slurry (mL/g) is never auto-deducted, and a batch with no recorded lot is
 // left alone.
 import { render } from '@testing-library/react'
@@ -29,11 +31,21 @@ const h = vi.hoisted(() => {
     updatedAt: '2026-07-04T00:00:00.000Z',
     schemaVersion: 1 as const,
   }
+  // Seeded by the rehydrate cases. When set, the atomic getOrCreateForBoard
+  // double reports a REHYDRATE (created:false) instead of a mint — `created`
+  // comes from inside the real transaction, and is what gates the deduction.
+  const board = { existing: null as Record<string, unknown> | null }
   return {
     session,
+    board,
     getByBoard: vi.fn().mockResolvedValue(null),
     getActive: vi.fn().mockResolvedValue(null),
     nextBatchNo: vi.fn().mockResolvedValue(1),
+    getOrCreateForBoard: vi.fn(async (_boardId: string, make: (n: number) => unknown) =>
+      board.existing
+        ? { batch: board.existing, created: false }
+        : { batch: make(1), created: true },
+    ),
     getLot: vi.fn(),
     consume: vi.fn().mockResolvedValue(undefined),
     patch: vi.fn(),
@@ -70,6 +82,8 @@ vi.mock('@/lib/db/repos/batch', () => ({
     getByBoard: (id: string) => h.getByBoard(id),
     getActive: () => h.getActive(),
     nextBatchNo: () => h.nextBatchNo(),
+    getOrCreateForBoard: (id: string, make: (n: number) => unknown) =>
+      h.getOrCreateForBoard(id, make),
   },
 }))
 
@@ -175,6 +189,12 @@ import { GuidedRunner } from '@/components/system/run/guided-runner'
 afterEach(() => {
   vi.clearAllMocks()
   h.getByBoard.mockResolvedValue(null)
+  h.board.existing = null
+  h.getOrCreateForBoard.mockImplementation(async (_boardId, make) =>
+    h.board.existing
+      ? { batch: h.board.existing, created: false }
+      : { batch: make(1), created: true },
+  )
   h.consume.mockResolvedValue(undefined)
   h.session.yeastLotId = 'lot-1'
 })
@@ -204,36 +224,36 @@ describe('GuidedRunner — guarded yeast deduction', () => {
   it('does NOT deduct when no yeastLotId was recorded on the session/batch', async () => {
     h.session.yeastLotId = undefined
     render(<GuidedRunner />)
-    await vi.waitFor(() => expect(h.getByBoard).toHaveBeenCalled())
+    await vi.waitFor(() => expect(h.getOrCreateForBoard).toHaveBeenCalled())
     expect(h.getLot).not.toHaveBeenCalled()
     expect(h.consume).not.toHaveBeenCalled()
   })
 
   it('does NOT re-deduct on remount when rehydrating an ALREADY-deducted batch (persistent marker, not a ref)', async () => {
-    h.getByBoard.mockResolvedValue({
+    h.board.existing = {
       id: 'batch-1',
       batchNo: 1,
       status: 'in-progress',
       yeastLotId: 'lot-1',
       yeastDeducted: true,
-    })
+    }
     render(<GuidedRunner />)
-    await vi.waitFor(() => expect(h.getByBoard).toHaveBeenCalled())
+    await vi.waitFor(() => expect(h.getOrCreateForBoard).toHaveBeenCalled())
     expect(h.getLot).not.toHaveBeenCalled()
     expect(h.consume).not.toHaveBeenCalled()
   })
 
   it('does NOT deduct on rehydrate even when the existing batch was never marked — deduction only fires on first mint, never on the rehydrate path (closes the TOCTOU double-deduct race between two mounts sharing a board)', async () => {
-    h.getByBoard.mockResolvedValue({
+    h.board.existing = {
       id: 'batch-1',
       batchNo: 1,
       status: 'in-progress',
       yeastLotId: 'lot-1',
       yeastDeducted: undefined,
-    })
+    }
     h.getLot.mockResolvedValue({ id: 'lot-1', unit: 'packet' })
     render(<GuidedRunner />)
-    await vi.waitFor(() => expect(h.getByBoard).toHaveBeenCalled())
+    await vi.waitFor(() => expect(h.getOrCreateForBoard).toHaveBeenCalled())
     expect(h.getLot).not.toHaveBeenCalled()
     expect(h.consume).not.toHaveBeenCalled()
     expect(h.patch).not.toHaveBeenCalledWith({ yeastDeducted: true })
