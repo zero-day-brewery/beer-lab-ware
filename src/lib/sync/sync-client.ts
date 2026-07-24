@@ -302,7 +302,7 @@ export function mergeDumpTables(
   local: Tables,
   remote: Tables,
   now: string = new Date().toISOString(),
-): Tables {
+): { tables: Tables; boardConflictsResolved: number } {
   const out = { ...local } as Tables // start from local → superset + keeps device-local + unknown tables
   const keys = new Set<string>([...Object.keys(local), ...Object.keys(remote)])
 
@@ -357,7 +357,8 @@ export function mergeDumpTables(
   // are in the convergence cycle. Idempotent — a no-conflict input is unchanged.
   // (backup.restore() also runs this, so local Dexie is safe even against an old
   // bundle; doing it here makes the PUSHED dump clean in one cycle, not two.)
-  out.batches = resolveBoardConflicts(out.batches ?? [], now).rows
+  const boardResolution = resolveBoardConflicts(out.batches ?? [], now)
+  out.batches = boardResolution.rows
 
   // Supersede: a tombstone whose row survived in the merged OUTPUT can only
   // have survived because its timestamp beat `deletedAt` (mergeState/
@@ -382,7 +383,7 @@ export function mergeDumpTables(
   })
 
   reprojectAmounts(out)
-  return out
+  return { tables: out, boardConflictsResolved: boardResolution.demoted.length }
 }
 
 function rowCounts(tables: Tables): Record<string, number> {
@@ -450,6 +451,12 @@ export interface SyncResult {
    * so they're dropped and counted here instead (see `graftDaemonReadings`).
    */
   orphanReadingsDropped?: number
+  /**
+   * Two-way / pull-only passes: in-progress batches archived by the merge to
+   * keep ≤1 in-progress per fermenter vessel (two devices minted on the same
+   * vessel offline). See `resolveBoardConflicts` / `mergeDumpTables`.
+   */
+  boardConflictsResolved?: number
 }
 
 /** Total PUT attempts `syncOnce` makes before giving up on a persistently
@@ -494,6 +501,7 @@ interface PullMergeRestorePass {
   etag: string | null
   pulled: boolean
   merged: boolean
+  boardConflictsResolved: number
 }
 
 /** One full pull → dump-local → merge → (snapshot + restore) pass, WITHOUT the
@@ -512,7 +520,10 @@ async function pullMergeRestore(
   const { payload: remote, etag } = await transport.pull()
   const local = await backup.dump()
 
-  const mergedTables = remote ? mergeDumpTables(local.tables, remote.tables, now) : local.tables
+  const merged = remote
+    ? mergeDumpTables(local.tables, remote.tables, now)
+    : { tables: local.tables, boardConflictsResolved: 0 }
+  const mergedTables = merged.tables
   const mergedDump: DumpV10 = {
     version: 10,
     exportedAt: now,
@@ -534,7 +545,13 @@ async function pullMergeRestore(
     await backup.restore(mergedDump)
   }
 
-  return { mergedDump, etag, pulled: remote !== null, merged: remote !== null }
+  return {
+    mergedDump,
+    etag,
+    pulled: remote !== null,
+    merged: remote !== null,
+    boardConflictsResolved: merged.boardConflictsResolved,
+  }
 }
 
 /**
@@ -657,6 +674,7 @@ export async function syncOnce({
       merged: pass.merged,
       lastSyncAt: now,
       counts: rowCounts(pass.mergedDump.tables),
+      boardConflictsResolved: pass.boardConflictsResolved,
     }
   }
 
@@ -670,6 +688,7 @@ export async function syncOnce({
         merged: pass.merged,
         lastSyncAt: now,
         counts: rowCounts(pass.mergedDump.tables),
+        boardConflictsResolved: pass.boardConflictsResolved,
       }
     }
 

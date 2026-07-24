@@ -287,7 +287,7 @@ describe('union-idempotence — two devices reconciling the same conflict indepe
       inventoryItems: [theItem],
       stockTransactions: [opening, bDeduct],
     }
-    const mergedA = mergeDumpTables(aLocal, aRemote)
+    const mergedA = mergeDumpTables(aLocal, aRemote).tables
 
     // Device B's perspective — SYMMETRIC, computed with no knowledge of A's result.
     const bLocal = {
@@ -300,7 +300,7 @@ describe('union-idempotence — two devices reconciling the same conflict indepe
       inventoryItems: [theItem],
       stockTransactions: [opening, aDeduct],
     }
-    const mergedB = mergeDumpTables(bLocal, bRemote)
+    const mergedB = mergeDumpTables(bLocal, bRemote).tables
 
     const reconA = mergedA.stockTransactions.filter((t) => t.reason === 'sync-reconcile')
     const reconB = mergedB.stockTransactions.filter((t) => t.reason === 'sync-reconcile')
@@ -310,7 +310,7 @@ describe('union-idempotence — two devices reconciling the same conflict indepe
 
     // A third merge round — the two devices' results meeting — must NOT double
     // the compensation, and the invariant must hold.
-    const round2 = mergeDumpTables(mergedA, mergedB)
+    const round2 = mergeDumpTables(mergedA, mergedB).tables
     const recon2 = round2.stockTransactions.filter((t) => t.reason === 'sync-reconcile')
     expect(recon2).toHaveLength(1)
     expect(round2.inventoryItems[0].amount).toBe(0)

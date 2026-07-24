@@ -363,7 +363,7 @@ describe('cascade at merge time: readings of a batch that stayed tombstoned die 
       rowTombstones: [{ id: batchId, table: 'batches', deletedAt }],
     }
     const remote = { ...emptyTables(), batches: [staleBatch], readings: [lateReading] }
-    const merged = mergeDumpTables(local, remote)
+    const merged = mergeDumpTables(local, remote).tables
     expect(merged.batches).toEqual([]) // suppressed by its own tombstone, as before
     expect(merged.readings).toEqual([]) // pre-fix: survived forever — its `at` beat `deletedAt`
     expect(merged.rowTombstones).toHaveLength(1) // the batch tombstone still stands
@@ -376,7 +376,7 @@ describe('cascade at merge time: readings of a batch that stayed tombstoned die 
       rowTombstones: [{ id: batchId, table: 'batches', deletedAt }],
     }
     const remote = { ...emptyTables(), batches: [revivedBatch], readings: [lateReading] }
-    const merged = mergeDumpTables(local, remote)
+    const merged = mergeDumpTables(local, remote).tables
     expect(merged.batches).toHaveLength(1) // edit-after-delete beat the tombstone
     expect(merged.readings).toHaveLength(1) // its readings live exactly as long as it does
     expect(merged.rowTombstones).toEqual([]) // superseded, dropped
@@ -449,7 +449,7 @@ describe('edit-after-delete symmetry (LWW beats the tombstone)', () => {
       ...emptyTables(),
       recipes: [recipe({ id, updatedAt: '2026-06-06T00:00:00.000Z' })], // strictly after deletedAt
     }
-    const merged = mergeDumpTables(local, remote)
+    const merged = mergeDumpTables(local, remote).tables
     expect(merged.recipes).toHaveLength(1)
     expect(merged.rowTombstones).toEqual([]) // superseded, dropped
   })
@@ -464,7 +464,7 @@ describe('edit-after-delete symmetry (LWW beats the tombstone)', () => {
       ...emptyTables(),
       recipes: [recipe({ id, updatedAt: '2026-06-05T00:00:00.000Z' })], // exact tie
     }
-    const merged = mergeDumpTables(local, remote)
+    const merged = mergeDumpTables(local, remote).tables
     expect(merged.recipes).toEqual([])
     expect(merged.rowTombstones).toHaveLength(1) // still needed, kept
   })
@@ -577,7 +577,7 @@ describe('tombstone GC (bounded growth)', () => {
     const now = new Date(Date.parse(deletedAt) + RETENTION_MS + 1000).toISOString()
     const local = { ...emptyTables(), rowTombstones: [{ id, table: 'recipes', deletedAt }] }
     const remote = emptyTables()
-    const merged = mergeDumpTables(local, remote, now)
+    const merged = mergeDumpTables(local, remote, now).tables
     expect(merged.rowTombstones).toEqual([])
   })
 
@@ -588,7 +588,7 @@ describe('tombstone GC (bounded growth)', () => {
     const staleRow = recipe({ id, updatedAt: '2025-12-01T00:00:00.000Z' }) // strictly before deletedAt
     const local = { ...emptyTables(), rowTombstones: [{ id, table: 'recipes', deletedAt }] }
     const remote = { ...emptyTables(), recipes: [staleRow] }
-    const merged = mergeDumpTables(local, remote, now)
+    const merged = mergeDumpTables(local, remote, now).tables
     expect(merged.rowTombstones).toHaveLength(1)
     expect(merged.recipes).toEqual([]) // still suppressed in this merge's own output
   })
@@ -599,7 +599,7 @@ describe('tombstone GC (bounded growth)', () => {
     const now = new Date(Date.parse(deletedAt) + 1000).toISOString() // 1s old, nowhere near 180d
     const local = { ...emptyTables(), rowTombstones: [{ id, table: 'recipes', deletedAt }] }
     const remote = emptyTables()
-    const merged = mergeDumpTables(local, remote, now)
+    const merged = mergeDumpTables(local, remote, now).tables
     expect(merged.rowTombstones).toHaveLength(1)
   })
 })
@@ -651,7 +651,7 @@ describe('reprojectAmounts: a surviving item with a fully-cascaded ledger reconc
         { id: openingId, table: 'stockTransactions', deletedAt },
       ],
     }
-    const mergedA = mergeDumpTables(aLocal, aRemote)
+    const mergedA = mergeDumpTables(aLocal, aRemote).tables
 
     // Device B's perspective — SYMMETRIC, computed with no knowledge of A's result.
     const bLocal = {
@@ -662,7 +662,7 @@ describe('reprojectAmounts: a surviving item with a fully-cascaded ledger reconc
       ],
     }
     const bRemote = { ...emptyTables(), inventoryItems: [editedItem], stockTransactions: [opening] }
-    const mergedB = mergeDumpTables(bLocal, bRemote)
+    const mergedB = mergeDumpTables(bLocal, bRemote).tables
 
     for (const merged of [mergedA, mergedB]) {
       expect(merged.inventoryItems).toHaveLength(1)
@@ -695,7 +695,7 @@ describe('reprojectAmounts: a surviving item with a fully-cascaded ledger reconc
 
     // A third merge round — the two devices' results meeting — must NOT
     // double the compensation.
-    const round2 = mergeDumpTables(mergedA, mergedB)
+    const round2 = mergeDumpTables(mergedA, mergedB).tables
     const recon2 = round2.stockTransactions.filter((t) => t.reason === 'sync-reconcile')
     expect(recon2).toHaveLength(1)
     expect(round2.inventoryItems[0].amount).toBe(100)
