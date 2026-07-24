@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import { LogbookEmptyScene } from '@/components/brand/empty-scenes'
 import { StarRatingDisplay } from '@/components/ui/star-rating'
 import type { Batch } from '@/lib/brewing/types/batch'
@@ -29,29 +30,50 @@ export function LogbookList() {
 
   async function handleUndo() {
     if (!undo) return
-    await batchRepo.save(undo)
-    setUndo(null)
+    try {
+      await batchRepo.save(undo)
+      setUndo(null)
+    } catch (err) {
+      // Keep `undo` set — the banner is the user's only recovery of a batch we
+      // already deleted from the DB. Never let a failed restore silently eat it.
+      console.error('[Logbook] undo restore failed:', err)
+      toast.error('Could not restore the batch — try Undo again.')
+    }
   }
 
   async function handleRebrew(b: Batch) {
-    const batchNo = await batchRepo.nextBatchNo()
-    const clone: Batch = {
-      ...b,
-      id: crypto.randomUUID(),
-      batchNo,
-      name: `${b.name} (re-brew)`,
-      status: 'in-progress',
-      logs: [],
-      timers: [],
-      results: {},
-      tasting: undefined,
-      startedAt: new Date().toISOString(),
-      brewedAt: undefined,
-      completedAt: undefined,
-      archivedAt: undefined,
-      updatedAt: new Date().toISOString(),
+    try {
+      const batchNo = await batchRepo.nextBatchNo()
+      const clone: Batch = {
+        ...b,
+        id: crypto.randomUUID(),
+        batchNo,
+        name: `${b.name} (re-brew)`,
+        status: 'in-progress',
+        // A re-brew is a FRESH brew: don't inherit the source batch's vessel or
+        // its spent-yeast marker. Carrying fermenterBoardId would make the next
+        // guided session on that vessel rehydrate this clone instead of minting
+        // (see batchRepo.getOrCreateForBoard); carrying yeastDeducted would skip
+        // the new pitch's deduction. The vessel is assigned when the brew starts.
+        // (yeastLotId is intentionally kept — a re-brew of the same recipe keeps
+        // its yeast selection and, with yeastDeducted cleared, deducts afresh.)
+        fermenterBoardId: undefined,
+        yeastDeducted: undefined,
+        logs: [],
+        timers: [],
+        results: {},
+        tasting: undefined,
+        startedAt: new Date().toISOString(),
+        brewedAt: undefined,
+        completedAt: undefined,
+        archivedAt: undefined,
+        updatedAt: new Date().toISOString(),
+      }
+      await batchRepo.save(clone)
+    } catch (err) {
+      console.error('[Logbook] re-brew failed:', err)
+      toast.error('Could not start the re-brew — check the console for details.')
     }
-    await batchRepo.save(clone)
   }
 
   if (isLoading) return <p className="batchlist-empty">Loading…</p>
