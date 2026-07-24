@@ -88,6 +88,28 @@ describe('selectYeastLot', () => {
     })
     expect(sel.chosen?.id).toBe('stocked')
   })
+
+  it('a below-floor lot with a HEALTHY direct measurement is STILL floored (conservative)', () => {
+    // 90-day liquid lot = 34% est. viability → below the age floor, even though a
+    // fresh count says it holds 300 B live cells. selectYeastLot floors on age
+    // (currentViability), never on the measured count — so it over-recommends a
+    // starter rather than risk under-pitching an old lot. Guards the invariant.
+    const agedButMeasured = lot({
+      id: 'aged',
+      daysAgo: 90,
+      measuredViableCells_B: 300,
+      measuredAt: NOW.toISOString(),
+    })
+    expect(currentBelowFloor(agedButMeasured)).toBe(true)
+    const sel = selectYeastLot({
+      strain: 'California Ale',
+      requiredCells_B: 200,
+      lots: [agedButMeasured],
+      now: NOW,
+    })
+    expect(sel.chosen).toBeNull()
+    expect(sel.action).toBe('make-starter-or-buy')
+  })
 })
 
 // helper mirrors the engine's floor check for the "skips below-floor" assertion
