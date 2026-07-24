@@ -176,4 +176,89 @@ describe('batchRepo', () => {
     const firstActive = await repo.getActive()
     expect(firstActive?.status).toBe('in-progress')
   })
+
+  // ── getOrCreateForBoard: the duplicate-batch race ────────────────────────
+  // The runner used to check-then-act (getByBoard → … → put) with awaits in
+  // between and no transaction, so two mounts (StrictMode double-mount, two
+  // tabs) both read null and both minted. These pin the atomic contract.
+
+  /** Factory matching the runner's mint: a fresh batch bound to a vessel. */
+  function onBoard(boardId: string, status: Batch['status'] = 'in-progress') {
+    return (batchNo: number): Batch => {
+      const b = batch(crypto.randomUUID(), batchNo, status)
+      b.fermenterBoardId = boardId
+      return b
+    }
+  }
+
+  it('getOrCreateForBoard() mints exactly ONE batch when two mints race on the same board', async () => {
+    const [a, b] = await Promise.all([
+      repo.getOrCreateForBoard('f1', onBoard('f1')),
+      repo.getOrCreateForBoard('f1', onBoard('f1')),
+    ])
+
+    expect(await db.batches.count()).toBe(1)
+    expect(a.batch.id).toBe(b.batch.id)
+    // Exactly one caller may believe it minted — the yeast-deduct invariant.
+    expect([a.created, b.created].filter(Boolean)).toHaveLength(1)
+  })
+
+  it('getOrCreateForBoard() mints exactly ONE batch across two DB connections (two tabs)', async () => {
+    const db2 = new BrewDB('test-batches')
+    await db2.open()
+    const repo2 = makeBatchRepo(db2)
+    try {
+      const [a, b] = await Promise.all([
+        repo.getOrCreateForBoard('f1', onBoard('f1')),
+        repo2.getOrCreateForBoard('f1', onBoard('f1')),
+      ])
+      expect(await db.batches.count()).toBe(1)
+      expect(a.batch.id).toBe(b.batch.id)
+      expect([a.created, b.created].filter(Boolean)).toHaveLength(1)
+    } finally {
+      db2.close()
+    }
+  })
+
+  it('getOrCreateForBoard() gives concurrent mints on DIFFERENT boards distinct batch numbers', async () => {
+    await repo.save(batch('99999999-9999-4999-8999-999999999999', 7, 'complete'))
+
+    const [a, b] = await Promise.all([
+      repo.getOrCreateForBoard('f1', onBoard('f1')),
+      repo.getOrCreateForBoard('f2', onBoard('f2')),
+    ])
+
+    // nextBatchNo() outside the transaction let both read max=7 and write 8.
+    expect([a.batch.batchNo, b.batch.batchNo].sort()).toEqual([8, 9])
+    expect(await db.batches.count()).toBe(3)
+  })
+
+  it('getOrCreateForBoard() still mints on a vessel that already has many COMPLETED batches', async () => {
+    // Regression guard: a plain unique index on fermenterBoardId would break this,
+    // because a completed batch keeps its fermenterBoardId forever.
+    for (let i = 1; i <= 5; i++) {
+      const done = batch(`5555555${i}-5555-4555-8555-555555555555`, i, 'complete')
+      done.fermenterBoardId = 'f1'
+      await repo.save(done)
+    }
+
+    const res = await repo.getOrCreateForBoard('f1', onBoard('f1'))
+
+    expect(res.created).toBe(true)
+    expect(await db.batches.count()).toBe(6)
+  })
+
+  it('getOrCreateForBoard() returns the existing in-progress batch as created:false (never re-deducts yeast)', async () => {
+    const existing = batch('77777777-7777-4777-8777-777777777777', 3, 'in-progress')
+    existing.fermenterBoardId = 'f1'
+    existing.yeastDeducted = true
+    await repo.save(existing)
+
+    const res = await repo.getOrCreateForBoard('f1', onBoard('f1'))
+
+    expect(res.created).toBe(false)
+    expect(res.batch.id).toBe(existing.id)
+    expect(res.batch.yeastDeducted).toBe(true)
+    expect(await db.batches.count()).toBe(1)
+  })
 })

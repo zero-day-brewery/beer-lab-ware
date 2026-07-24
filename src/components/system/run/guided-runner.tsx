@@ -269,44 +269,45 @@ export function GuidedRunner(): React.JSX.Element {
     }
 
     const create = async () => {
-      // Rehydrate any existing in-progress batch ON THIS VESSEL before creating a new
-      // one. Resolving by board (not the first-active batch) keeps concurrent brews on
-      // different vessels attached to their own batch. This also prevents a duplicate
-      // batch on every fresh mount (per-instance useRef is null on every navigation/
-      // reload even when an in-progress batch already exists).
-      const existing = await batchRepo.getByBoard(session.fermenterId ?? TARGET_FERMENTER_ID)
-      if (existing) {
-        activeBatchIdRef.current = existing.id
-        setBatchActive(existing)
-        // No deduct here — deliberately. Deduction only ever fires on the
-        // "new batch minted" path below; a rehydrate is not a new pitch, so
-        // there's nothing to deduct and nothing to race. (See the
-        // maybeDeductYeast comment above for the TOCTOU rationale.) A crash
-        // between mint and deduct leaves yeastDeducted false permanently —
-        // accepted, and recoverable via a manual Yeast Bank per-lot edit.
-        return
-      }
-      const id = crypto.randomUUID()
-      activeBatchIdRef.current = id
+      const boardId = session.fermenterId ?? TARGET_FERMENTER_ID
       try {
-        const batchNo = await batchRepo.nextBatchNo()
-        const batch = sessionToBatch({
-          session,
-          recipe,
-          equipment,
-          calc,
-          manual: BREW_MANUAL,
-          id,
-          batchNo,
-          now: new Date().toISOString(),
-          fermenterId: session.fermenterId ?? TARGET_FERMENTER_ID,
-        })
-        setBatchActive(batch)
-        // Persist immediately so the logbook is visible right away
-        await useActiveBatchStore.getState().flush()
-        // The ONLY deduct call site — fires once, right after this batch's
-        // first mint on this vessel (see maybeDeductYeast comment above).
-        await maybeDeductYeast(batch)
+        // ATOMIC rehydrate-or-mint on THIS VESSEL. The re-check, the batchNo
+        // allocation and the write all happen inside one Dexie transaction, so a
+        // concurrent mount can no longer mint a second batch on the same board.
+        // This replaced a check-then-act (getByBoard → await → put) that two
+        // mounts could interleave — the per-instance useRef above stops repeat
+        // renders, but is null in every NEW mount (StrictMode double-mount, a
+        // second tab, a remount after navigation), so it never closed the race.
+        // Resolving by board (not first-active) keeps concurrent brews on
+        // different vessels attached to their own batch.
+        // `make` MUST stay synchronous — awaiting a non-Dexie promise inside a
+        // Dexie transaction lets it auto-close (TransactionInactiveError).
+        const { batch, created } = await batchRepo.getOrCreateForBoard(boardId, (batchNo) =>
+          sessionToBatch({
+            session,
+            recipe,
+            equipment,
+            calc,
+            manual: BREW_MANUAL,
+            id: crypto.randomUUID(),
+            batchNo,
+            now: new Date().toISOString(),
+            fermenterId: boardId,
+          }),
+        )
+        activeBatchIdRef.current = batch.id
+        // The transaction already persisted the row, so do NOT flush here: a
+        // flush would restamp updatedAt (perturbing sync's LWW ordering) and, on
+        // a StrictMode second mount, discard the first mount's in-flight
+        // debounce buffer inside the module-level controller singleton.
+        if (useActiveBatchStore.getState().batch?.id !== batch.id) setBatchActive(batch)
+        // The ONLY deduct call site, and only on a genuine mint — a rehydrate is
+        // not a new pitch, so there is nothing to deduct and nothing to race.
+        // `created` comes from inside the transaction, which is what makes that
+        // distinction trustworthy. (See the maybeDeductYeast TOCTOU note above.)
+        // A crash between mint and deduct leaves yeastDeducted false permanently
+        // — accepted, and recoverable via a manual Yeast Bank per-lot edit.
+        if (created) await maybeDeductYeast(batch)
       } catch (err) {
         console.error('[GuidedRunner] batch create failed:', err)
         toast.error('Failed to create brew log — check console for details.')

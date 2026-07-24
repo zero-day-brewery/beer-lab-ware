@@ -52,17 +52,73 @@ export function makeBatchRepo(database: BrewDB) {
       )
     },
     async getActive(): Promise<Batch | null> {
-      const row = await database.batches.filter((b) => b.status === 'in-progress').first()
+      // Indexed seek — `status` is in the batches index list. A bare .filter()
+      // deserializes EVERY fat batch row (recipeSnapshot/process/logs) to find one.
+      const row = await database.batches.where('status').equals('in-progress').first()
       return row ? BatchSchema.parse(row) : null
     },
     async getByBoard(boardId: NonNullable<Batch['fermenterBoardId']>): Promise<Batch | null> {
+      // Seek the vessel via its index, then narrow by status across the handful of
+      // batches that vessel has hosted — rather than scanning the whole table. The
+      // old full scan walked rows in primary-key (UUID) order, so when duplicates
+      // existed "which one wins" was effectively random.
       const row = await database.batches
-        .filter((b) => b.status === 'in-progress' && b.fermenterBoardId === boardId)
+        .where('fermenterBoardId')
+        .equals(boardId)
+        .filter((b) => b.status === 'in-progress')
         .first()
       return row ? BatchSchema.parse(row) : null
     },
+    /**
+     * ATOMIC get-or-create for a fermenter vessel — the ONLY safe way to mint a
+     * batch from the guided runner.
+     *
+     * The runner used to check-then-act: `getByBoard()` → `await nextBatchNo()`
+     * → `put()`, with no transaction spanning it. Two mounts (React StrictMode's
+     * double-mount, a second tab, a remount after navigation) both read `null`
+     * and both minted — duplicate in-progress batches on one vessel. The
+     * component's `useRef` guard could never help: a ref is PER INSTANCE, so it
+     * is null in every new mount.
+     *
+     * Re-checking, allocating batchNo, and putting inside ONE 'rw' transaction
+     * closes it: IndexedDB serializes overlapping-scope readwrite transactions
+     * per DATABASE (not per connection), so a second tab's transaction queues
+     * behind this one and then sees the row. Allocating batchNo inside the tx
+     * also fixes concurrent mints on DIFFERENT boards both claiming max+1.
+     *
+     * `make` MUST be synchronous — awaiting a non-Dexie promise inside a Dexie
+     * transaction lets the transaction auto-close (TransactionInactiveError).
+     *
+     * Returns `created` so the caller can distinguish mint from rehydrate: the
+     * guarded once-per-batch yeast deduction must fire on the mint path ONLY
+     * (see the TOCTOU rationale in guided-runner's Effect 1).
+     *
+     * NOT covered: two devices minting offline on the same vessel — that is the
+     * sync merge's job, deliberately, because a DB-level constraint here would
+     * turn a survivable merge into a failed restore.
+     */
+    async getOrCreateForBoard(
+      boardId: NonNullable<Batch['fermenterBoardId']>,
+      make: (batchNo: number) => Batch,
+    ): Promise<{ batch: Batch; created: boolean }> {
+      return database.transaction('rw', database.batches, async () => {
+        const existing = await database.batches
+          .where('fermenterBoardId')
+          .equals(boardId)
+          .filter((b) => b.status === 'in-progress')
+          .first()
+        if (existing) return { batch: BatchSchema.parse(existing), created: false }
+
+        const last = await database.batches.orderBy('batchNo').last()
+        const next = BatchSchema.parse(make((last?.batchNo ?? 0) + 1))
+        await database.batches.put(next)
+        return { batch: next, created: true }
+      })
+    },
     // Collision-proof: recompute max(batchNo) at call time so two saves in a row
     // never reuse a number. A cached counter would collide after a restore/import.
+    // NOTE: only safe for single mints — concurrent callers race. The runner uses
+    // getOrCreateForBoard(), which allocates inside the transaction instead.
     async nextBatchNo(): Promise<number> {
       const last = await database.batches.orderBy('batchNo').last()
       return (last?.batchNo ?? 0) + 1
