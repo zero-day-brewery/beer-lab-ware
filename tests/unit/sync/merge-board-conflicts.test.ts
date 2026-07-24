@@ -35,21 +35,24 @@ const ip = (id: string, batchNo: number, board = 'f1') => ({
 })
 const NOW = '2026-07-24T00:00:00.000Z'
 
+const ip2 = (b: { status: string }) => b.status === 'in-progress'
+const arch = (b: { status: string }) => b.status === 'archived'
+
 describe('mergeDumpTables — board-conflict resolution', () => {
-  it('archives the loser when two devices minted an in-progress batch on the same vessel', () => {
+  it('archives the loser + reports boardConflictsResolved when two devices minted on one vessel', () => {
     // Device-local mint (aaaa) meets a remote mint (bbbb) on the same board.
     const out = mergeDumpTables(
       tables({ batches: [ip('aaaa', 1)] }),
       tables({ batches: [ip('bbbb', 2)] }),
       NOW,
     )
-    expect(out.batches).toHaveLength(2) // union — nothing deleted
-    expect(out.batches.filter((b: { status: string }) => b.status === 'in-progress')).toHaveLength(
-      1,
-    )
-    expect(out.batches.filter((b: { status: string }) => b.status === 'archived')).toHaveLength(1)
+    const rows = out.tables.batches
+    expect(rows).toHaveLength(2) // union — nothing deleted
+    expect(rows.filter(ip2)).toHaveLength(1)
+    expect(rows.filter(arch)).toHaveLength(1)
     // Higher batchNo (later mint) is the deterministic winner (immutable ranking).
-    expect(out.batches.find((b: { status: string }) => b.status === 'in-progress')?.id).toBe('bbbb')
+    expect(rows.find(ip2)?.id).toBe('bbbb')
+    expect(out.boardConflictsResolved).toBe(1) // telemetry surfaced
   })
 
   it('both devices compute the SAME winner (local/remote swapped)', () => {
@@ -63,18 +66,15 @@ describe('mergeDumpTables — board-conflict resolution', () => {
       tables({ batches: [ip('aaaa', 1)] }),
       NOW,
     )
-    const winnerA = a.batches.find((x: { status: string }) => x.status === 'in-progress')?.id
-    const winnerB = b.batches.find((x: { status: string }) => x.status === 'in-progress')?.id
-    expect(winnerA).toBe('bbbb')
-    expect(winnerB).toBe('bbbb') // no divergence regardless of which side is "local"
+    expect(a.tables.batches.find(ip2)?.id).toBe('bbbb')
+    expect(b.tables.batches.find(ip2)?.id).toBe('bbbb') // no divergence regardless of which side is "local"
   })
 
-  it('leaves a single in-progress batch per vessel untouched', () => {
+  it('leaves a single in-progress batch per vessel untouched (0 resolved)', () => {
     const out = mergeDumpTables(tables({ batches: [ip('aaaa', 1)] }), tables(), NOW)
-    expect(out.batches.filter((b: { status: string }) => b.status === 'in-progress')).toHaveLength(
-      1,
-    )
-    expect(out.batches.filter((b: { status: string }) => b.status === 'archived')).toHaveLength(0)
+    expect(out.tables.batches.filter(ip2)).toHaveLength(1)
+    expect(out.tables.batches.filter(arch)).toHaveLength(0)
+    expect(out.boardConflictsResolved).toBe(0)
   })
 
   it('does not conflate two vessels', () => {
@@ -83,8 +83,7 @@ describe('mergeDumpTables — board-conflict resolution', () => {
       tables(),
       NOW,
     )
-    expect(out.batches.filter((b: { status: string }) => b.status === 'in-progress')).toHaveLength(
-      2,
-    )
+    expect(out.tables.batches.filter(ip2)).toHaveLength(2)
+    expect(out.boardConflictsResolved).toBe(0)
   })
 })
