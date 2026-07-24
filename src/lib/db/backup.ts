@@ -30,6 +30,7 @@ import type { BrewTimer } from '@/lib/brewing/types/timer'
 import { BrewTimerSchema } from '@/lib/brewing/types/timer'
 import type { YeastLot } from '@/lib/brewing/types/yeast-lot'
 import { YeastLotSchema } from '@/lib/brewing/types/yeast-lot'
+import { resolveBoardConflicts } from '@/lib/db/board-conflicts'
 import { type BrewDB, db, type RowTombstone, type SeedTombstone } from '@/lib/db/schema'
 
 export interface DumpV1 {
@@ -298,7 +299,18 @@ export function makeBackupService(database: BrewDB) {
         d.version === 8 ||
         d.version === 9 ||
         d.version === 10
-      const batches = hasV4 ? (d as DumpV4).tables.batches.map((r) => BatchSchema.parse(r)) : null
+      const restoredAt = opts.now ?? new Date().toISOString()
+      const batchesParsed = hasV4
+        ? (d as DumpV4).tables.batches.map((r) => BatchSchema.parse(r))
+        : null
+      // Enforce "≤1 in-progress batch per fermenter" BEFORE writing. A hand-edited
+      // or sync-merged dump can carry duplicates (there is no unique index guarding
+      // this — see the duplicate-batch race fix), and persisting them just
+      // reintroduces the state the invariant forbids. The loser is ARCHIVED, never
+      // dropped — zero data loss — and its updatedAt is bumped to restoredAt so the
+      // repair wins the next LWW sync merge and heals the canonical copy. Same pure
+      // resolver the sync merge + data doctor use, so all three agree on the winner.
+      const batches = batchesParsed ? resolveBoardConflicts(batchesParsed, restoredAt).rows : null
       const brewSessions = hasV4
         ? (d as DumpV4).tables.brewSessions.map((r) => BrewSessionSchema.parse(r))
         : null
@@ -396,7 +408,6 @@ export function makeBackupService(database: BrewDB) {
       // (see above) and is left untouched. Mutates the freshly-parsed (not
       // caller-owned) arrays in place.
       if (opts.bumpTimestamps) {
-        const restoredAt = opts.now ?? new Date().toISOString()
         for (const r of recipes) r.updatedAt = restoredAt
         if (inventoryItems) for (const r of inventoryItems) r.updatedAt = restoredAt
         if (gearItems) for (const r of gearItems) r.updatedAt = restoredAt
