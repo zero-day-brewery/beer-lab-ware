@@ -8,6 +8,7 @@ import { useDisplayNumberState } from '@/hooks/use-display-units'
 import { calculateRecipe } from '@/lib/brewing/calc/pipeline'
 import { formatWithUnit, unitLabel } from '@/lib/brewing/convert/display-units'
 import { B40PRO_PROFILE } from '@/lib/brewing/defaults/b40pro'
+import { availableFermenters } from '@/lib/brewing/fermenter-availability'
 import { planYeastPitch, type YeastPitchPlan } from '@/lib/brewing/inventory/yeast-pitch-plan'
 import { MANUAL_VERSION } from '@/lib/brewing/process'
 import {
@@ -24,6 +25,7 @@ import { waterRepo } from '@/lib/db/repos/water'
 import { yeastLotsRepo } from '@/lib/db/repos/yeast-lots'
 import { reportDbError } from '@/lib/diagnostics/error-log'
 import { newId } from '@/lib/utils/id'
+import { useBatchesStore } from '@/stores/batches-store'
 import { useEquipmentStore } from '@/stores/equipment-store'
 import { useRecipesStore } from '@/stores/recipes-store'
 import { useSessionStore } from '@/stores/session-store'
@@ -129,11 +131,15 @@ export function BrewStartGate({ onClose }: { onClose: () => void }) {
   const { profiles: waters } = useWaterProfilesStore()
   const startBrew = useSystemStore((s) => s.startBrew)
   const fermenters = useSystemStore((s) => s.fermenters)
+  const { batches } = useBatchesStore()
   const router = useRouter()
 
-  // Only empty vessels can accept a new brew. Keyed on f.id (uuid-or-seed — never
-  // assume 'f1' exists), labelled f.name. Default to the first empty vessel.
-  const emptyFermenters = fermenters.filter((f) => f.status === 'empty')
+  // Only empty vessels can accept a new brew. Availability is derived from BOTH
+  // the local fermenter status AND the synced in-progress batches — the fermenter
+  // board is device-local (localStorage, unsynced), so on a second device it
+  // reads every vessel 'empty' even while a synced batch occupies it. Keyed on
+  // f.id (uuid-or-seed — never assume 'f1' exists), labelled f.name.
+  const emptyFermenters = availableFermenters(fermenters, batches)
   const allOccupied = emptyFermenters.length === 0
 
   const [recipeId, setRecipeId] = useState(recipes[0]?.id ?? '') // '' = plan manually
