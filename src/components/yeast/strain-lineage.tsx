@@ -1,6 +1,6 @@
 'use client'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { HarvestForm } from '@/components/yeast/harvest-form'
 import { GENERATION_WARN_AT } from '@/lib/brewing/inventory/yeast-harvest'
@@ -8,6 +8,7 @@ import type {
   LineageNode,
   StrainLineage as StrainLineageT,
 } from '@/lib/brewing/inventory/yeast-lineage'
+import { reparentCandidates } from '@/lib/brewing/inventory/yeast-reparent'
 import { VIABILITY_FLOOR_PCT } from '@/lib/brewing/inventory/yeast-selection'
 import { currentViability, viableCells } from '@/lib/brewing/inventory/yeast-viability'
 import type { YeastLot } from '@/lib/brewing/types/yeast-lot'
@@ -61,6 +62,18 @@ export function StrainLineage({
 }) {
   const now = new Date()
   const childCounts = childCountsOf(lineage)
+  // Flat list of THIS strain's lots — the candidate pool for re-parenting an
+  // orphan (buildLineage puts every lot in a root subtree OR orphanLots).
+  const strainLots = useMemo(() => {
+    const acc: YeastLot[] = []
+    const walk = (n: LineageNode) => {
+      acc.push(n.lot)
+      for (const c of n.children) walk(c)
+    }
+    for (const r of lineage.roots) walk(r)
+    acc.push(...lineage.orphanLots)
+    return acc
+  }, [lineage])
   return (
     <section className="lineage-strain tap-card">
       <div className="lineage-strain-head">
@@ -82,6 +95,7 @@ export function StrainLineage({
                 useNextIds={useNextIds}
                 batchNoById={batchNoById}
                 childCounts={childCounts}
+                strainLots={strainLots}
               />
             ))}
           </div>
@@ -98,6 +112,8 @@ export function StrainLineage({
                   lot={lot}
                   now={now}
                   note="parent missing"
+                  orphaned
+                  strainLots={strainLots}
                   useNextIds={useNextIds}
                   batchNoById={batchNoById}
                   childCount={childCounts.get(lot.id) ?? 0}
@@ -117,12 +133,14 @@ function LineageBranch({
   useNextIds,
   batchNoById,
   childCounts,
+  strainLots,
 }: {
   node: LineageNode
   now: Date
   useNextIds: Set<string>
   batchNoById: Map<string, number>
   childCounts: Map<string, number>
+  strainLots: YeastLot[]
 }) {
   return (
     <div className="lineage-branch">
@@ -133,6 +151,7 @@ function LineageBranch({
         batchNoById={batchNoById}
         childCount={childCounts.get(node.lot.id) ?? node.children.length}
         orphaned={node.orphaned}
+        strainLots={strainLots}
       />
       {node.children.length > 0 && (
         <div className="lineage-children">
@@ -144,6 +163,7 @@ function LineageBranch({
               useNextIds={useNextIds}
               batchNoById={batchNoById}
               childCounts={childCounts}
+              strainLots={strainLots}
             />
           ))}
         </div>
@@ -160,6 +180,7 @@ function LineageNodeCard({
   useNextIds,
   batchNoById,
   childCount = 0,
+  strainLots,
 }: {
   lot: YeastLot
   now: Date
@@ -172,10 +193,14 @@ function LineageNodeCard({
   useNextIds: Set<string>
   batchNoById: Map<string, number>
   childCount?: number
+  /** This strain's full lot set — the candidate pool for re-parenting when
+   *  `orphaned`. Only read on the orphan path. */
+  strainLots: YeastLot[]
 }) {
   const [editingQty, setEditingQty] = useState(false)
   const [qtyDraft, setQtyDraft] = useState(() => String(lot.quantity))
   const [harvesting, setHarvesting] = useState(false)
+  const [parentDraft, setParentDraft] = useState('') // '' = make root
 
   const pct = currentViability(lot, now)
   const cells = viableCells(lot, now)
@@ -224,6 +249,17 @@ function LineageNodeCard({
     }
   }
 
+  // Re-parent an orphan: change ONLY parentLotId (generation is preserved — a
+  // deleted parent doesn't change the recorded repitch count). '' = make it a root.
+  const reassignParent = async () => {
+    try {
+      await yeastLotsRepo.save({ ...lot, parentLotId: parentDraft || undefined })
+      toast.success(parentDraft ? `Re-parented "${lot.name}"` : `"${lot.name}" is now a root`)
+    } catch (err) {
+      toast.error(`Re-parent failed: ${(err as Error).message}`)
+    }
+  }
+
   return (
     <div
       data-testid="lineage-node"
@@ -245,7 +281,7 @@ function LineageNodeCard({
         )}
         {useNext && <span className="mini-alert go">use next</span>}
         {belowFloor && <span className="mini-alert warn">low viability</span>}
-        {orphaned && (
+        {orphaned && !note && (
           <span
             className="mini-alert warn"
             title="This lot's recorded parent is missing or was deleted"
@@ -310,6 +346,30 @@ function LineageNodeCard({
           </>
         )}
       </div>
+
+      {orphaned && (
+        <div className="flex flex-wrap items-center gap-1 text-xs" data-testid="reparent-row">
+          <label className="flex items-center gap-1">
+            <span>Set parent</span>
+            <select
+              value={parentDraft}
+              onChange={(e) => setParentDraft(e.target.value)}
+              aria-label={`New parent for ${lot.name}`}
+              className="field"
+            >
+              <option value="">— No parent (make root) —</option>
+              {reparentCandidates(lot, strainLots).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} (gen {c.generation})
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" onClick={reassignParent} className="btn-ghost">
+            Reassign
+          </button>
+        </div>
+      )}
 
       {harvesting && <HarvestForm parentLot={lot} onDone={() => setHarvesting(false)} />}
 
